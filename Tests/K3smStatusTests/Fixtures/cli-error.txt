@@ -1,0 +1,2 @@
+Error: unknown shorthand flag: 'x' in -x
+Run 'k3sm status --help' for usage.

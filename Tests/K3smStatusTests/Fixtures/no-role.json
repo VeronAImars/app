@@ -1,0 +1,9 @@
+{
+  "schemaVersion": 1,
+  "verdict": "running",
+  "summary": "an older report with no top-level role",
+  "daemons": [
+    {"name": "netd", "state": "running", "severity": "ok", "detail": "pid 1"},
+    {"name": "agent", "state": "running", "severity": "ok", "detail": "pid 2"}
+  ]
+}

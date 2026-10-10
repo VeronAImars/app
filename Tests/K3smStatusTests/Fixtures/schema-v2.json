@@ -1,0 +1,9 @@
+{
+  "schemaVersion": 2,
+  "verdict": "running",
+  "role": "server",
+  "summary": "a future contract version",
+  "daemons": [
+    {"name": "server", "state": "running", "severity": "ok", "detail": "pid 1"}
+  ]
+}
