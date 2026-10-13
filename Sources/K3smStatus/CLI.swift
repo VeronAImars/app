@@ -28,6 +28,27 @@ public enum K3smCLI {
     public static let reportArguments = ["status", "-o", "json"]
     /// The installed version, read on launch for the update check.
     public static let versionArguments = ["version"]
+    /// The workloads list: every pod on the cluster, through the CLI's bundled
+    /// kubectl with the kubeconfig the CLI presets.
+    public static let workloadsArguments = ["kubectl", "get", "pods", "-A", "-o", "json"]
+    /// The most log lines a detail call asks for.
+    public static let logTail = 200
+
+    /// The last `logTail` lines of every container of one pod.
+    public static func logsArguments(namespace: ResourceName, pod: ResourceName) -> [String] {
+        ["kubectl", "logs", "-n", namespace.value, pod.value, "--tail=\(logTail)", "--all-containers"]
+    }
+
+    /// The events recorded against one pod, oldest first.
+    public static func eventsArguments(namespace: ResourceName, pod: ResourceName) -> [String] {
+        ["kubectl", "get", "events", "-n", namespace.value, "--field-selector", "involvedObject.name=\(pod.value)",
+         "--sort-by=.lastTimestamp", "-o", "custom-columns=AGE:.lastTimestamp,TYPE:.type,REASON:.reason,MESSAGE:.message"]
+    }
+
+    /// One pod as the API server holds it.
+    public static func manifestArguments(namespace: ResourceName, pod: ResourceName) -> [String] {
+        ["kubectl", "get", "pod", "-n", namespace.value, pod.value, "-o", "yaml"]
+    }
     /// The PATH every CLI run gets: system directories only.
     public static let systemPath = "/usr/bin:/bin:/usr/sbin:/sbin"
 
