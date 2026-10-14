@@ -81,6 +81,57 @@ enum SelfCheck {
         return PrivilegedAvailability.evaluate(teamID: team, signatureValid: valid, userIsAdmin: userIsAdmin())
     }
 
+    /// Whether the app will run the installed CLI as root, or ask it which
+    /// verbs it has: `/Library/k3sm/k3sm` and every directory above it are
+    /// root-owned, not group or other writable and not symlinks, and the
+    /// binary satisfies the Developer ID requirement for `team`. The same
+    /// checks the lifecycle root script repeats as root before it runs.
+    ///
+    /// A developer build pins no team, so it checks the paths only; it offers
+    /// no lifecycle verb either way.
+    static func installedCLITrust(team: TeamID?) -> InstalledCLITrust {
+        InstalledCLITrust.evaluate(
+            cliPath: K3smCLI.path,
+            facts: pathFacts,
+            signatureValid: { team.map { binarySignatureValid(path: K3smCLI.path, team: $0) } ?? true })
+    }
+
+    /// `lstat` of one path, or nil when it cannot be read.
+    static func pathFacts(_ path: String) -> InstalledCLITrust.PathFacts? {
+        var st = stat()
+        guard lstat(path, &st) == 0 else { return nil }
+        let type = st.st_mode & S_IFMT
+        return InstalledCLITrust.PathFacts(
+            isSymlink: type == S_IFLNK, isDirectory: type == S_IFDIR, isRegularFile: type == S_IFREG,
+            ownerUID: st.st_uid, mode: UInt16(st.st_mode & 0o7777), hasACL: hasACL(path))
+    }
+
+    /// Whether a path (not what a symlink points at) carries an extended ACL
+    /// with at least one entry. An unreadable ACL counts as present.
+    static func hasACL(_ path: String) -> Bool {
+        guard let acl = acl_get_link_np(path, ACL_TYPE_EXTENDED) else {
+            return errno != ENOENT
+        }
+        defer { acl_free(UnsafeMutableRawPointer(acl)) }
+        var entry: acl_entry_t?
+        return acl_get_entry(acl, ACL_FIRST_ENTRY.rawValue, &entry) == 0
+    }
+
+    /// Verifies one binary against the Developer ID requirement for `team`.
+    static func binarySignatureValid(path: String, team: TeamID) -> Bool {
+        var code: SecStaticCode?
+        guard SecStaticCodeCreateWithPath(URL(fileURLWithPath: path) as CFURL, [], &code) == errSecSuccess, let code else {
+            return false
+        }
+        var requirement: SecRequirement?
+        let text = DesignatedRequirement.developerID(teamID: team) as CFString
+        guard SecRequirementCreateWithString(text, [], &requirement) == errSecSuccess, let requirement else {
+            return false
+        }
+        let flags = SecCSFlags(rawValue: kSecCSCheckAllArchitectures | kSecCSStrictValidate)
+        return SecStaticCodeCheckValidity(code, flags, requirement) == errSecSuccess
+    }
+
     /// The CLI environment for this user, from the passwd entry rather than
     /// the inherited environment.
     static func cliEnvironment() -> [String: String] {
