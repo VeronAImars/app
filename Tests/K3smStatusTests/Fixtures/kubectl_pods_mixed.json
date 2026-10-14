@@ -1,0 +1,273 @@
+{
+ "apiVersion": "v1",
+ "kind": "PodList",
+ "metadata": {
+  "resourceVersion": "1"
+ },
+ "items": [
+  {
+   "apiVersion": "v1",
+   "kind": "Pod",
+   "metadata": {
+    "name": "web-7c9d4f6b8-x2lqp",
+    "namespace": "default",
+    "uid": "00000000-0000-4000-8000-311776795154",
+    "creationTimestamp": "2026-10-13T06:00:00Z",
+    "ownerReferences": [
+     {
+      "apiVersion": "apps/v1",
+      "kind": "ReplicaSet",
+      "name": "web-7c9d4f6b8",
+      "uid": "x"
+     }
+    ]
+   },
+   "spec": {
+    "containers": [
+     {
+      "name": "c",
+      "image": "registry.local/web:1.4",
+      "resources": {
+       "requests": {
+        "cpu": "250m",
+        "memory": "64Mi"
+       }
+      },
+      "ports": [
+       {
+        "containerPort": 8080,
+        "protocol": "TCP"
+       }
+      ]
+     }
+    ],
+    "nodeSelector": {
+     "kubernetes.io/os": "darwin"
+    }
+   },
+   "status": {
+    "phase": "Running",
+    "containerStatuses": [
+     {
+      "name": "c",
+      "ready": true,
+      "restartCount": 0,
+      "image": "registry.local/web:1.4",
+      "imageID": "",
+      "containerID": "k3sm-runtimed://abc",
+      "state": {
+       "running": {
+        "startedAt": "2026-10-13T06:00:01Z"
+       }
+      }
+     }
+    ]
+   }
+  },
+  {
+   "apiVersion": "v1",
+   "kind": "Pod",
+   "metadata": {
+    "name": "probes-demo",
+    "namespace": "default",
+    "uid": "00000000-0000-4000-8000-727382349837",
+    "creationTimestamp": "2026-10-13T06:00:00Z"
+   },
+   "spec": {
+    "containers": [
+     {
+      "name": "c",
+      "image": "registry.local/probes:dev"
+     }
+    ],
+    "nodeSelector": {
+     "kubernetes.io/os": "darwin"
+    }
+   },
+   "status": {
+    "phase": "Running",
+    "containerStatuses": [
+     {
+      "name": "c",
+      "ready": false,
+      "restartCount": 3,
+      "image": "registry.local/probes:dev",
+      "imageID": "",
+      "containerID": "k3sm-runtimed://abc",
+      "state": {
+       "waiting": {
+        "reason": "CrashLoopBackOff"
+       }
+      }
+     }
+    ]
+   }
+  },
+  {
+   "apiVersion": "v1",
+   "kind": "Pod",
+   "metadata": {
+    "name": "redis-cache-0",
+    "namespace": "default",
+    "uid": "00000000-0000-4000-8000-943723016581",
+    "creationTimestamp": "2026-10-13T06:00:00Z"
+   },
+   "spec": {
+    "containers": [
+     {
+      "name": "c",
+      "image": "docker.io/library/redis:7"
+     }
+    ],
+    "nodeSelector": {
+     "kubernetes.io/os": "darwin"
+    },
+    "runtimeClassName": "vm"
+   },
+   "status": {
+    "phase": "Pending",
+    "reason": "Unschedulable"
+   }
+  },
+  {
+   "apiVersion": "v1",
+   "kind": "Pod",
+   "metadata": {
+    "name": "mlx-qwen-0",
+    "namespace": "ml",
+    "uid": "00000000-0000-4000-8000-570347910537",
+    "creationTimestamp": "2026-10-13T06:00:00Z"
+   },
+   "spec": {
+    "containers": [
+     {
+      "name": "c",
+      "image": "registry.local/mlx-worker:0.3",
+      "resources": {
+       "requests": {
+        "cpu": "2",
+        "memory": "20Gi"
+       }
+      },
+      "ports": [
+       {
+        "containerPort": 8000,
+        "protocol": "TCP"
+       }
+      ]
+     }
+    ],
+    "nodeSelector": {
+     "kubernetes.io/os": "darwin"
+    }
+   },
+   "status": {
+    "phase": "Running",
+    "containerStatuses": [
+     {
+      "name": "c",
+      "ready": true,
+      "restartCount": 0,
+      "image": "registry.local/mlx-worker:0.3",
+      "imageID": "",
+      "containerID": "k3sm-runtimed://abc",
+      "state": {
+       "running": {
+        "startedAt": "2026-10-13T06:00:01Z"
+       }
+      }
+     }
+    ]
+   }
+  },
+  {
+   "apiVersion": "v1",
+   "kind": "Pod",
+   "metadata": {
+    "name": "backfill-1",
+    "namespace": "ml",
+    "uid": "00000000-0000-4000-8000-151034134642",
+    "creationTimestamp": "2026-10-13T06:00:00Z"
+   },
+   "spec": {
+    "containers": [
+     {
+      "name": "c",
+      "image": "native"
+     }
+    ],
+    "nodeSelector": {
+     "kubernetes.io/os": "darwin"
+    }
+   },
+   "status": {
+    "phase": "Succeeded",
+    "containerStatuses": [
+     {
+      "name": "c",
+      "ready": false,
+      "restartCount": 0,
+      "image": "native",
+      "imageID": "",
+      "containerID": "k3sm-runtimed://abc",
+      "state": {
+       "terminated": {
+        "reason": "Completed",
+        "exitCode": 1
+       }
+      }
+     }
+    ]
+   }
+  },
+  {
+   "apiVersion": "v1",
+   "kind": "Pod",
+   "metadata": {
+    "name": "postgres-0",
+    "namespace": "temporal",
+    "uid": "00000000-0000-4000-8000-684816723943",
+    "creationTimestamp": "2026-10-13T06:00:00Z",
+    "ownerReferences": [
+     {
+      "apiVersion": "apps/v1",
+      "kind": "StatefulSet",
+      "name": "postgres",
+      "uid": "x"
+     }
+    ]
+   },
+   "spec": {
+    "containers": [
+     {
+      "name": "c",
+      "image": "docker.io/library/postgres:16"
+     }
+    ],
+    "nodeSelector": {
+     "kubernetes.io/os": "darwin"
+    },
+    "runtimeClassName": "vm"
+   },
+   "status": {
+    "phase": "Failed",
+    "containerStatuses": [
+     {
+      "name": "c",
+      "ready": false,
+      "restartCount": 0,
+      "image": "docker.io/library/postgres:16",
+      "imageID": "",
+      "containerID": "k3sm-runtimed://abc",
+      "state": {
+       "terminated": {
+        "reason": "Error",
+        "exitCode": 1
+       }
+      }
+     }
+    ]
+   }
+  }
+ ]
+}

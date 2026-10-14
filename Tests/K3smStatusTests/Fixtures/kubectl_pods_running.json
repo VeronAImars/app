@@ -1,0 +1,607 @@
+{
+ "apiVersion": "v1",
+ "items": [
+  {
+   "apiVersion": "v1",
+   "kind": "Pod",
+   "metadata": {
+    "annotations": {
+     "kubectl.kubernetes.io/last-applied-configuration": "{\"apiVersion\":\"v1\",\"kind\":\"Pod\",\"metadata\":{\"annotations\":{},\"name\":\"bench-vm\",\"namespace\":\"default\"},\"spec\":{\"containers\":[{\"command\":[\"/bin/sh\",\"-c\",\"sleep infinity\"],\"image\":\"alpine:3.20\",\"name\":\"sleep\"}],\"nodeSelector\":{\"kubernetes.io/os\":\"darwin\"},\"restartPolicy\":\"Never\",\"runtimeClassName\":\"vm\",\"tolerations\":[{\"effect\":\"NoSchedule\",\"key\":\"k3sm.io/provider\",\"operator\":\"Exists\"}]}}\n",
+     "kubernetes.io/limit-ranger": "LimitRanger plugin set: memory request for container sleep; memory limit for container sleep"
+    },
+    "creationTimestamp": "2026-10-13T22:07:28Z",
+    "generation": 1,
+    "labels": {
+     "topology.kubernetes.io/region": "k3sm",
+     "topology.kubernetes.io/zone": "k3sm-studio"
+    },
+    "name": "bench-vm",
+    "namespace": "default",
+    "resourceVersion": "274307",
+    "uid": "8d9eddcb-e231-480b-99f1-d480b2659564"
+   },
+   "spec": {
+    "containers": [
+     {
+      "command": [
+       "/bin/sh",
+       "-c",
+       "sleep infinity"
+      ],
+      "image": "alpine:3.20",
+      "imagePullPolicy": "IfNotPresent",
+      "name": "sleep",
+      "resources": {
+       "limits": {
+        "memory": "512Mi"
+       },
+       "requests": {
+        "memory": "256Mi"
+       }
+      },
+      "terminationMessagePath": "/dev/termination-log",
+      "terminationMessagePolicy": "File",
+      "volumeMounts": [
+       {
+        "mountPath": "/var/run/secrets/kubernetes.io/serviceaccount",
+        "name": "kube-api-access-5pr9g",
+        "readOnly": true
+       }
+      ]
+     }
+    ],
+    "dnsPolicy": "ClusterFirst",
+    "enableServiceLinks": true,
+    "nodeName": "k3sm-studio",
+    "nodeSelector": {
+     "k3sm.io/virtualization": "true",
+     "kubernetes.io/os": "darwin"
+    },
+    "overhead": {
+     "memory": "256Mi"
+    },
+    "preemptionPolicy": "PreemptLowerPriority",
+    "priority": 0,
+    "restartPolicy": "Never",
+    "runtimeClassName": "vm",
+    "schedulerName": "default-scheduler",
+    "securityContext": {},
+    "serviceAccount": "default",
+    "serviceAccountName": "default",
+    "terminationGracePeriodSeconds": 30,
+    "tolerations": [
+     {
+      "effect": "NoSchedule",
+      "key": "k3sm.io/provider",
+      "operator": "Exists"
+     },
+     {
+      "effect": "NoExecute",
+      "key": "node.kubernetes.io/not-ready",
+      "operator": "Exists",
+      "tolerationSeconds": 300
+     },
+     {
+      "effect": "NoExecute",
+      "key": "node.kubernetes.io/unreachable",
+      "operator": "Exists",
+      "tolerationSeconds": 300
+     }
+    ],
+    "volumes": [
+     {
+      "name": "kube-api-access-5pr9g",
+      "projected": {
+       "defaultMode": 420,
+       "sources": [
+        {
+         "serviceAccountToken": {
+          "expirationSeconds": 3607,
+          "path": "token"
+         }
+        },
+        {
+         "configMap": {
+          "items": [
+           {
+            "key": "ca.crt",
+            "path": "ca.crt"
+           }
+          ],
+          "name": "kube-root-ca.crt"
+         }
+        },
+        {
+         "downwardAPI": {
+          "items": [
+           {
+            "fieldRef": {
+             "apiVersion": "v1",
+             "fieldPath": "metadata.namespace"
+            },
+            "path": "namespace"
+           }
+          ]
+         }
+        }
+       ]
+      }
+     }
+    ]
+   },
+   "status": {
+    "conditions": [
+     {
+      "lastProbeTime": null,
+      "lastTransitionTime": null,
+      "status": "True",
+      "type": "Initialized"
+     },
+     {
+      "lastProbeTime": null,
+      "lastTransitionTime": "2026-10-13T22:07:32Z",
+      "status": "True",
+      "type": "Ready"
+     },
+     {
+      "lastProbeTime": null,
+      "lastTransitionTime": null,
+      "status": "True",
+      "type": "ContainersReady"
+     },
+     {
+      "lastProbeTime": null,
+      "lastTransitionTime": null,
+      "status": "True",
+      "type": "PodScheduled"
+     }
+    ],
+    "containerStatuses": [
+     {
+      "image": "alpine:3.20",
+      "imageID": "",
+      "lastState": {},
+      "name": "sleep",
+      "ready": true,
+      "restartCount": 0,
+      "started": true,
+      "state": {
+       "running": {
+        "startedAt": "2026-10-13T22:07:32Z"
+       }
+      }
+     }
+    ],
+    "hostIP": "100.64.0.1",
+    "hostIPs": [
+     {
+      "ip": "100.64.0.1"
+     }
+    ],
+    "phase": "Running",
+    "podIP": "100.64.0.7",
+    "podIPs": [
+     {
+      "ip": "100.64.0.7"
+     }
+    ],
+    "qosClass": "Burstable",
+    "startTime": "2026-10-13T22:07:28Z"
+   }
+  },
+  {
+   "apiVersion": "v1",
+   "kind": "Pod",
+   "metadata": {
+    "creationTimestamp": "2026-10-13T22:07:28Z",
+    "generateName": "hello-http-6bcddf6f77-",
+    "generation": 1,
+    "labels": {
+     "app": "hello-http",
+     "pod-template-hash": "6bcddf6f77",
+     "topology.kubernetes.io/region": "k3sm",
+     "topology.kubernetes.io/zone": "k3sm-studio"
+    },
+    "name": "hello-http-6bcddf6f77-sz8n8",
+    "namespace": "default",
+    "ownerReferences": [
+     {
+      "apiVersion": "apps/v1",
+      "blockOwnerDeletion": true,
+      "controller": true,
+      "kind": "ReplicaSet",
+      "name": "hello-http-6bcddf6f77",
+      "uid": "2961e305-076a-4b39-b3cd-90ec70d9c463"
+     }
+    ],
+    "resourceVersion": "274303",
+    "uid": "80b84dee-f51f-42d2-9430-886232742663"
+   },
+   "spec": {
+    "containers": [
+     {
+      "command": [
+       "/bin/sh",
+       "-c",
+       "while :; do\n  printf 'HTTP/1.1 200 OK\\r\\nContent-Length: 6\\r\\nConnection: close\\r\\n\\r\\nhello\\n' \\\n    | /usr/bin/nc -l 8080 >/dev/null 2>&1 || sleep 1\ndone\n"
+      ],
+      "image": "native",
+      "imagePullPolicy": "Always",
+      "name": "hello-http",
+      "ports": [
+       {
+        "containerPort": 8080,
+        "name": "http",
+        "protocol": "TCP"
+       }
+      ],
+      "readinessProbe": {
+       "failureThreshold": 3,
+       "httpGet": {
+        "path": "/",
+        "port": "http",
+        "scheme": "HTTP"
+       },
+       "initialDelaySeconds": 2,
+       "periodSeconds": 5,
+       "successThreshold": 1,
+       "timeoutSeconds": 2
+      },
+      "resources": {
+       "limits": {
+        "memory": "128Mi"
+       },
+       "requests": {
+        "memory": "32Mi"
+       }
+      },
+      "terminationMessagePath": "/dev/termination-log",
+      "terminationMessagePolicy": "File",
+      "volumeMounts": [
+       {
+        "mountPath": "/var/run/secrets/kubernetes.io/serviceaccount",
+        "name": "kube-api-access-pw78f",
+        "readOnly": true
+       }
+      ]
+     }
+    ],
+    "dnsPolicy": "ClusterFirst",
+    "enableServiceLinks": true,
+    "nodeName": "k3sm-studio",
+    "nodeSelector": {
+     "kubernetes.io/os": "darwin"
+    },
+    "preemptionPolicy": "PreemptLowerPriority",
+    "priority": 0,
+    "restartPolicy": "Always",
+    "schedulerName": "default-scheduler",
+    "securityContext": {},
+    "serviceAccount": "default",
+    "serviceAccountName": "default",
+    "terminationGracePeriodSeconds": 30,
+    "tolerations": [
+     {
+      "effect": "NoSchedule",
+      "key": "k3sm.io/provider",
+      "operator": "Exists"
+     },
+     {
+      "effect": "NoExecute",
+      "key": "node.kubernetes.io/not-ready",
+      "operator": "Exists",
+      "tolerationSeconds": 300
+     },
+     {
+      "effect": "NoExecute",
+      "key": "node.kubernetes.io/unreachable",
+      "operator": "Exists",
+      "tolerationSeconds": 300
+     }
+    ],
+    "volumes": [
+     {
+      "name": "kube-api-access-pw78f",
+      "projected": {
+       "defaultMode": 420,
+       "sources": [
+        {
+         "serviceAccountToken": {
+          "expirationSeconds": 3607,
+          "path": "token"
+         }
+        },
+        {
+         "configMap": {
+          "items": [
+           {
+            "key": "ca.crt",
+            "path": "ca.crt"
+           }
+          ],
+          "name": "kube-root-ca.crt"
+         }
+        },
+        {
+         "downwardAPI": {
+          "items": [
+           {
+            "fieldRef": {
+             "apiVersion": "v1",
+             "fieldPath": "metadata.namespace"
+            },
+            "path": "namespace"
+           }
+          ]
+         }
+        }
+       ]
+      }
+     }
+    ]
+   },
+   "status": {
+    "conditions": [
+     {
+      "lastProbeTime": null,
+      "lastTransitionTime": null,
+      "status": "True",
+      "type": "Initialized"
+     },
+     {
+      "lastProbeTime": null,
+      "lastTransitionTime": "2026-10-13T22:07:30Z",
+      "status": "True",
+      "type": "Ready"
+     },
+     {
+      "lastProbeTime": null,
+      "lastTransitionTime": null,
+      "status": "True",
+      "type": "ContainersReady"
+     },
+     {
+      "lastProbeTime": null,
+      "lastTransitionTime": null,
+      "status": "True",
+      "type": "PodScheduled"
+     }
+    ],
+    "containerStatuses": [
+     {
+      "containerID": "k3sm-runtimed://e870dfe91598bbd1d94e6d61bc078d9bc265b9ff9e0bf719a56ff2080837f332",
+      "image": "native",
+      "imageID": "",
+      "lastState": {},
+      "name": "hello-http",
+      "ready": true,
+      "restartCount": 0,
+      "started": true,
+      "state": {
+       "running": {
+        "startedAt": "2026-10-13T22:07:28Z"
+       }
+      },
+      "volumeMounts": [
+       {
+        "mountPath": "/var/run/secrets/kubernetes.io/serviceaccount",
+        "name": "kube-api-access-pw78f",
+        "readOnly": true
+       }
+      ]
+     }
+    ],
+    "hostIP": "100.64.0.1",
+    "hostIPs": [
+     {
+      "ip": "100.64.0.1"
+     }
+    ],
+    "phase": "Running",
+    "podIP": "100.64.0.8",
+    "podIPs": [
+     {
+      "ip": "100.64.0.8"
+     }
+    ],
+    "qosClass": "Burstable",
+    "startTime": "2026-10-13T22:07:28Z"
+   }
+  },
+  {
+   "apiVersion": "v1",
+   "kind": "Pod",
+   "metadata": {
+    "annotations": {
+     "kubectl.kubernetes.io/last-applied-configuration": "{\"apiVersion\":\"v1\",\"kind\":\"Pod\",\"metadata\":{\"annotations\":{},\"name\":\"hello-native\",\"namespace\":\"default\"},\"spec\":{\"containers\":[{\"command\":[\"/bin/sh\",\"-c\",\"echo 'hello from a k3sm native pod'\\n/usr/bin/sw_vers\\nexec /usr/bin/tail -f /dev/null\\n\"],\"image\":\"native\",\"name\":\"hello\"}],\"nodeSelector\":{\"kubernetes.io/os\":\"darwin\"},\"restartPolicy\":\"Never\",\"tolerations\":[{\"effect\":\"NoSchedule\",\"key\":\"k3sm.io/provider\",\"operator\":\"Exists\"}]}}\n",
+     "kubernetes.io/limit-ranger": "LimitRanger plugin set: memory request for container hello; memory limit for container hello"
+    },
+    "creationTimestamp": "2026-10-13T22:07:28Z",
+    "generation": 1,
+    "labels": {
+     "topology.kubernetes.io/region": "k3sm",
+     "topology.kubernetes.io/zone": "k3sm-studio"
+    },
+    "name": "hello-native",
+    "namespace": "default",
+    "resourceVersion": "274298",
+    "uid": "1505052f-235d-4e76-863a-95b2ae3498b2"
+   },
+   "spec": {
+    "containers": [
+     {
+      "command": [
+       "/bin/sh",
+       "-c",
+       "echo 'hello from a k3sm native pod'\n/usr/bin/sw_vers\nexec /usr/bin/tail -f /dev/null\n"
+      ],
+      "image": "native",
+      "imagePullPolicy": "Always",
+      "name": "hello",
+      "resources": {
+       "limits": {
+        "memory": "512Mi"
+       },
+       "requests": {
+        "memory": "256Mi"
+       }
+      },
+      "terminationMessagePath": "/dev/termination-log",
+      "terminationMessagePolicy": "File",
+      "volumeMounts": [
+       {
+        "mountPath": "/var/run/secrets/kubernetes.io/serviceaccount",
+        "name": "kube-api-access-kzpth",
+        "readOnly": true
+       }
+      ]
+     }
+    ],
+    "dnsPolicy": "ClusterFirst",
+    "enableServiceLinks": true,
+    "nodeName": "k3sm-studio",
+    "nodeSelector": {
+     "kubernetes.io/os": "darwin"
+    },
+    "preemptionPolicy": "PreemptLowerPriority",
+    "priority": 0,
+    "restartPolicy": "Never",
+    "schedulerName": "default-scheduler",
+    "securityContext": {},
+    "serviceAccount": "default",
+    "serviceAccountName": "default",
+    "terminationGracePeriodSeconds": 30,
+    "tolerations": [
+     {
+      "effect": "NoSchedule",
+      "key": "k3sm.io/provider",
+      "operator": "Exists"
+     },
+     {
+      "effect": "NoExecute",
+      "key": "node.kubernetes.io/not-ready",
+      "operator": "Exists",
+      "tolerationSeconds": 300
+     },
+     {
+      "effect": "NoExecute",
+      "key": "node.kubernetes.io/unreachable",
+      "operator": "Exists",
+      "tolerationSeconds": 300
+     }
+    ],
+    "volumes": [
+     {
+      "name": "kube-api-access-kzpth",
+      "projected": {
+       "defaultMode": 420,
+       "sources": [
+        {
+         "serviceAccountToken": {
+          "expirationSeconds": 3607,
+          "path": "token"
+         }
+        },
+        {
+         "configMap": {
+          "items": [
+           {
+            "key": "ca.crt",
+            "path": "ca.crt"
+           }
+          ],
+          "name": "kube-root-ca.crt"
+         }
+        },
+        {
+         "downwardAPI": {
+          "items": [
+           {
+            "fieldRef": {
+             "apiVersion": "v1",
+             "fieldPath": "metadata.namespace"
+            },
+            "path": "namespace"
+           }
+          ]
+         }
+        }
+       ]
+      }
+     }
+    ]
+   },
+   "status": {
+    "conditions": [
+     {
+      "lastProbeTime": null,
+      "lastTransitionTime": null,
+      "status": "True",
+      "type": "Initialized"
+     },
+     {
+      "lastProbeTime": null,
+      "lastTransitionTime": "2026-10-13T22:07:28Z",
+      "status": "True",
+      "type": "Ready"
+     },
+     {
+      "lastProbeTime": null,
+      "lastTransitionTime": null,
+      "status": "True",
+      "type": "ContainersReady"
+     },
+     {
+      "lastProbeTime": null,
+      "lastTransitionTime": null,
+      "status": "True",
+      "type": "PodScheduled"
+     }
+    ],
+    "containerStatuses": [
+     {
+      "containerID": "k3sm-runtimed://d3ed111a9d843474506afa7265fc4bd23b6c69f1284b7c0757d08402b81c3943",
+      "image": "native",
+      "imageID": "",
+      "lastState": {},
+      "name": "hello",
+      "ready": true,
+      "restartCount": 0,
+      "started": true,
+      "state": {
+       "running": {
+        "startedAt": "2026-10-13T22:07:28Z"
+       }
+      },
+      "volumeMounts": [
+       {
+        "mountPath": "/var/run/secrets/kubernetes.io/serviceaccount",
+        "name": "kube-api-access-kzpth",
+        "readOnly": true
+       }
+      ]
+     }
+    ],
+    "hostIP": "100.64.0.1",
+    "hostIPs": [
+     {
+      "ip": "100.64.0.1"
+     }
+    ],
+    "phase": "Running",
+    "podIP": "100.64.0.6",
+    "podIPs": [
+     {
+      "ip": "100.64.0.6"
+     }
+    ],
+    "qosClass": "Burstable",
+    "startTime": "2026-10-13T22:07:28Z"
+   }
+  }
+ ],
+ "kind": "List",
+ "metadata": {
+  "resourceVersion": ""
+ }
+}
