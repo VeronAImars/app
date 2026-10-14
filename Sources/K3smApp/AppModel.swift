@@ -20,7 +20,8 @@ import K3smInstall
 import K3smStatus
 
 /// AppModel is the window's state: which screen it shows, the last full
-/// report, the first-run form, and a running root step with its log.
+/// report, the first-run form, the update and uninstall choices, and a
+/// running root step with its log.
 @MainActor
 final class AppModel: ObservableObject {
     enum Screen: Equatable {
@@ -52,9 +53,22 @@ final class AppModel: ObservableObject {
     @Published var choice: FirstRunChoice = .start
     @Published var serverText = ""
     @Published var token = ""
+    /// The worker's join target, read from its installed plist on refresh.
+    @Published private(set) var joinTarget: Result<ServerAddress, AgentJoinTarget.ReadError>?
+    /// The user's confirmation that every worker is updated (server only,
+    /// while the status report carries no worker versions).
+    @Published var workersConfirmed = false
+    /// The uninstall form's purge checkbox; stays off while the app cannot
+    /// purge (`CopyOutAction.purgeUnavailableReason`).
+    @Published var purge = false
+    /// Whether the uninstall confirmation is showing. Held here rather than
+    /// in view state: the Command Line Tools toolchain has no SwiftUI macro
+    /// plugin, so the window uses no `@State`.
+    @Published var confirmingUninstall = false
 
     let payloadVersion: SemanticVersion?
     private let teamID: TeamID?
+    private let user: ConsoleUser?
     private let runner: any PrivilegedRunner
     private let environment: [String: String]
 
@@ -62,8 +76,13 @@ final class AppModel: ObservableObject {
         self.runner = runner
         self.environment = environment
         self.teamID = SelfCheck.teamID()
+        self.user = SelfCheck.consoleUser()
         self.payloadVersion = SelfCheck.payloadVersion()
-        self.availability = SelfCheck.availability()
+        var availability = SelfCheck.availability()
+        if availability == .enabled, user == nil {
+            availability = .disabled(reason: "k3sm could not read a non-root account name for this user, so it cannot install k3sm.")
+        }
+        self.availability = availability
         // An unfinished or failed earlier run is the first thing the window
         // shows on relaunch.
         let previous = Self.readLog()
@@ -84,22 +103,61 @@ final class AppModel: ObservableObject {
         }
     }
 
+    /// Whether a privileged step may start now.
+    private var canRunPrivileged: Bool {
+        !running && availability == .enabled && payloadVersion != nil
+    }
+
     /// Whether the first-run button is enabled.
     var canSubmit: Bool {
-        guard !running, availability == .enabled, payloadVersion != nil else { return false }
+        guard canRunPrivileged else { return false }
         switch choice {
         case .start: return true
         case .join: return addressError == nil && !serverText.isEmpty && !token.isEmpty
         }
     }
 
-    /// Re-reads which screen applies, the full report and the installed
-    /// version. The full report runs only here, when the window is shown.
+    /// The installed role, from the full report.
+    var role: NodeRole? {
+        report.flatMap(NodeRole.detect(in:))
+    }
+
+    /// The update decision for this Mac, or nil when the role, the payload
+    /// or the report is unknown. Worker versions are not in today's status
+    /// JSON, so a server update rests on the user's confirmation.
+    var updateDecision: UpdateDecision? {
+        guard let role, let payloadVersion else { return nil }
+        return UpdatePolicy.decide(
+            role: role, payload: payloadVersion, installed: installedVersion,
+            workers: nil, allowDowngrade: false, workersConfirmed: workersConfirmed)
+    }
+
+    /// The update action the window would run, or nil when none is ready.
+    var updateAction: CopyOutAction? {
+        guard updateDecision?.verdict == .offer else { return nil }
+        switch role {
+        case .server: return .update(.server)
+        case .agent:
+            guard case .success(let server) = joinTarget else { return nil }
+            return .update(.agent(joinServer: server))
+        case nil: return nil
+        }
+    }
+
+    var canUpdate: Bool { canRunPrivileged && updateAction != nil }
+    /// The uninstall the window would run; nil for a purge the app cannot do.
+    var uninstallAction: CopyOutAction? { CopyOutAction.uninstall(requestingPurge: purge) }
+    var canUninstall: Bool { canRunPrivileged && uninstallAction != nil }
+
+    /// Re-reads which screen applies, the full report, the installed version
+    /// and, on a worker, its join target. The full report runs only here,
+    /// when the window is shown.
     func refresh() async {
         screen = FileManager.default.fileExists(atPath: K3smCLI.installRoot) ? .status : .firstRun
         guard screen == .status else {
             report = nil
             installedVersion = nil
+            joinTarget = nil
             return
         }
         if case .exited(_, let stdout) = await runCLI(K3smCLI.reportArguments) {
@@ -108,11 +166,12 @@ final class AppModel: ObservableObject {
         if case .exited(0, let stdout) = await runCLI(K3smCLI.versionArguments) {
             installedVersion = SemanticVersion.fromVersionCommand(String(decoding: stdout, as: UTF8.self))
         }
+        joinTarget = role == .agent ? Self.readJoinTarget() : nil
     }
 
     /// Runs the first-run choice through the privileged runner.
     func submitFirstRun() {
-        guard canSubmit, let teamID, let payloadVersion else { return }
+        guard canSubmit else { return }
         let action: CopyOutAction
         var input: Data?
         switch choice {
@@ -126,9 +185,29 @@ final class AppModel: ObservableObject {
             input = Data(token.trimmingCharacters(in: .whitespacesAndNewlines).utf8)
             token = ""
         }
+        start(action, input: input)
+    }
+
+    /// Runs the update the window offers.
+    func submitUpdate() {
+        guard canUpdate, let action = updateAction else { return }
+        workersConfirmed = false
+        start(action, input: nil)
+    }
+
+    /// Runs the uninstall, keeping the data unless purge is chosen and the
+    /// app can purge.
+    func submitUninstall() {
+        guard canUninstall, let action = uninstallAction else { return }
+        start(action, input: nil)
+    }
+
+    private func start(_ action: CopyOutAction, input: Data?) {
+        guard let teamID, let user, let payloadVersion else { return }
         let plan: CopyOutPlan
         do {
-            plan = try CopyOutPlan(bundlePath: Bundle.main.bundlePath, payloadVersion: payloadVersion, teamID: teamID, action: action)
+            plan = try CopyOutPlan(
+                bundlePath: Bundle.main.bundlePath, payloadVersion: payloadVersion, teamID: teamID, user: user, action: action)
         } catch {
             outcomeMessage = "k3sm cannot run from \(Bundle.main.bundlePath). Move it to the Applications folder."
             return
@@ -162,6 +241,18 @@ final class AppModel: ObservableObject {
 
     private func runCLI(_ arguments: [String]) async -> CLIOutcome {
         await CLIProcess.run(path: K3smCLI.path, arguments: arguments, environment: environment, deadline: PollSchedule.killDeadline)
+    }
+
+    /// Reads the installed worker's join target from its plist.
+    private static func readJoinTarget() -> Result<ServerAddress, AgentJoinTarget.ReadError> {
+        guard let data = FileManager.default.contents(atPath: AgentJoinTarget.plistPath) else {
+            return .failure(.notAPlist)
+        }
+        do {
+            return .success(try AgentJoinTarget.read(plist: data))
+        } catch {
+            return .failure(error)
+        }
     }
 
     /// Reads the tail of the copy-out log, or "" when it is absent or not
