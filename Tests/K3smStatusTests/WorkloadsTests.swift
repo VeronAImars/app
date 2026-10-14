@@ -115,6 +115,57 @@ struct QuantityTests {
         #expect(Quantity.cores("lots") == nil)
         #expect(Quantity.bytes("12Qi") == nil)
     }
+
+    // The API server accepts these on any pod in any namespace; the app must
+    // refuse them, never trap, or one pod crashes the status poll for everyone.
+    @Test("out-of-range bytes are nil, never a trap", arguments: ["1e19", "10000000Ti", "nan", "inf", "-inf", "-1Gi"])
+    func outOfRangeBytes(_ s: String) {
+        #expect(Quantity.bytes(s) == nil)
+    }
+
+    @Test("non-finite or negative cores are nil", arguments: ["nan", "inf", "-1", "-500m"])
+    func outOfRangeCores(_ s: String) {
+        #expect(Quantity.cores(s) == nil)
+    }
+
+    @Test("the largest representable request still decodes")
+    func largestBytes() {
+        #expect(Quantity.bytes("4Ei") == nil) // no Ei suffix: refused, not misread
+        #expect(Quantity.bytes("8000000Ti") == 8_796_093_022_208_000_000)
+    }
+
+    @Test("a sum that overflows Int64 is nil")
+    func overflowingSum() {
+        #expect(Quantity.sum([Int64.max, 1]) == nil)
+        #expect(Quantity.sum([1, 2, 3]) == 6)
+        #expect(Quantity.sum([]) == 0)
+    }
+
+    @Test("two containers whose requests overflow give a nil memory request")
+    func overflowingPod() throws {
+        let json = #"""
+        {"kind":"PodList","items":[{"metadata":{"name":"big","namespace":"default"},
+          "spec":{"containers":[
+            {"name":"a","image":"x","resources":{"requests":{"memory":"8000000Ti"}}},
+            {"name":"b","image":"x","resources":{"requests":{"memory":"8000000Ti"}}}]},
+          "status":{"phase":"Pending"}}]}
+        """#
+        let w = try Workloads.decode(Data(json.utf8))
+        #expect(w.pods.count == 1)
+        #expect(w.pods.first?.memoryRequest == nil)
+    }
+
+    @Test("an oversized request on one pod does not stop the list decoding")
+    func oversizedPod() throws {
+        let json = #"""
+        {"kind":"PodList","items":[{"metadata":{"name":"huge","namespace":"default"},
+          "spec":{"containers":[{"name":"a","image":"x","resources":{"requests":{"memory":"1e19","cpu":"nan"}}}]},
+          "status":{"phase":"Pending"}}]}
+        """#
+        let w = try Workloads.decode(Data(json.utf8))
+        #expect(w.pods.first?.memoryRequest == nil)
+        #expect(w.pods.first?.cpuRequest == nil)
+    }
 }
 
 @Suite("resource names on a command line")

@@ -18,7 +18,9 @@ import Foundation
 
 /// ResourceName is a Kubernetes object name as the API server accepts it (RFC 1123
 /// subdomain): lowercase letters, digits, '-' and '.', starting and ending with a
-/// letter or digit, at most 253 characters. Every name the app puts on a kubectl
+/// letter or digit, at most 253 characters. Namespaces are the narrower RFC 1123
+/// label (no '.', at most 63 characters); accepting the wider form for them too is
+/// still safe, since it is a superset of every name the server serves. Every name the app puts on a kubectl
 /// command line goes through this, so a name can never carry an option or a path.
 public struct ResourceName: Equatable, Sendable, CustomStringConvertible {
     public let value: String
@@ -95,8 +97,10 @@ public enum PodHealth: Equatable, Sendable {
 public enum Quantity {
     /// A CPU quantity as cores: "500m" is 0.5, "2" is 2.
     public static func cores(_ text: String) -> Double? {
-        if text.hasSuffix("m"), let v = Double(text.dropLast()) { return v / 1000 }
-        return Double(text)
+        let v: Double?
+        if text.hasSuffix("m"), let milli = Double(text.dropLast()) { v = milli / 1000 } else { v = Double(text) }
+        guard let v, v.isFinite, v >= 0 else { return nil }
+        return v
     }
 
     /// A memory quantity as bytes: "256Mi", "1Gi", "500M", "1024".
@@ -107,10 +111,29 @@ public enum Quantity {
         ]
         for (suffix, scale) in suffixes where text.hasSuffix(suffix) {
             guard let v = Double(text.dropLast(suffix.count)) else { return nil }
-            return Int64(v * scale)
+            return integral(v * scale)
         }
         guard let v = Double(text) else { return nil }
-        return Int64(v)
+        return integral(v)
+    }
+
+    /// The value as whole bytes, or nil when it is negative, not finite, or
+    /// outside Int64. The API server accepts requests such as "1e19" or
+    /// "10000000Ti" on any pod, so a plain Int64(_:) conversion would trap here.
+    private static func integral(_ v: Double) -> Int64? {
+        guard v.isFinite, v >= 0 else { return nil }
+        return Int64(exactly: v.rounded(.towardZero))
+    }
+
+    /// The sum of the values, or nil when it overflows Int64.
+    static func sum(_ values: [Int64]) -> Int64? {
+        var total: Int64 = 0
+        for v in values {
+            let (next, overflow) = total.addingReportingOverflow(v)
+            if overflow { return nil }
+            total = next
+        }
+        return total
     }
 }
 
@@ -131,7 +154,8 @@ public struct Pod: Equatable, Sendable {
     /// offered only when an owner will recreate the pod.
     public let owner: String?
     public let created: Date?
-    /// Requested cores and bytes, summed over containers; nil when no container requests them.
+    /// Requested cores and bytes, summed over containers; nil when no container
+    /// requests them, and the byte total is nil when it does not fit in Int64.
     public let cpuRequest: Double?
     public let memoryRequest: Int64?
 
@@ -269,10 +293,13 @@ extension Pod {
         let cpu = wire.spec.containers.compactMap { $0.resources?.requests?["cpu"] }.compactMap(Quantity.cores)
         cpuRequest = cpu.isEmpty ? nil : cpu.reduce(0, +)
         let mem = wire.spec.containers.compactMap { $0.resources?.requests?["memory"] }.compactMap(Quantity.bytes)
-        memoryRequest = mem.isEmpty ? nil : mem.reduce(0, +)
+        memoryRequest = mem.isEmpty ? nil : Quantity.sum(mem)
         let statuses = wire.status?.containerStatuses ?? []
         ready = !statuses.isEmpty && statuses.allSatisfy(\.ready)
-        restarts = statuses.map(\.restartCount).reduce(0, +)
+        restarts = statuses.reduce(0) { total, status in
+            let (next, overflow) = total.addingReportingOverflow(status.restartCount)
+            return overflow ? Int.max : next
+        }
         let waitingReason = statuses.compactMap { $0.state?.waiting?.reason }.first ?? ""
         let terminatedReason = statuses.compactMap { $0.state?.terminated?.reason }.first ?? ""
         switch phase {
