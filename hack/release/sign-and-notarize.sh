@@ -9,8 +9,11 @@
 #   1. check that every Mach-O in the payload already carries a Developer ID
 #      signature from <team-id> (the payload is signed before
 #      build-app.sh --payload, so the manifest describes signed bytes)
-#   2. stamp the Team ID into Info.plist (K3smTeamID) for the app's own
-#      signature check
+#   2. check that the app executable was built for <team-id>: it must hold
+#      exactly one compiled Team ID stamp, equal to <team-id>
+#      (hack/build-app.sh --team-id <team-id>, hack/check-team-pin.sh). The
+#      pin is the only Team ID the app trusts; nothing is stamped into
+#      Info.plist
 #   3. sign the app inside out with <identity>, the hardened runtime and a
 #      secure timestamp, then verify it against the designated requirement
 #   4. notarize the app (notarytool, keychain profile k3sm-notary) and staple
@@ -62,8 +65,9 @@ if [ -d "$app/Contents/Resources/payload" ]; then
 	done < <(/usr/bin/find "$app/Contents/Resources/payload" -type f -print0)
 fi
 
-echo "==> stamp K3smTeamID"
-/usr/bin/plutil -replace K3smTeamID -string "$team" "$app/Contents/Info.plist"
+echo "==> check the compiled Team ID pin"
+"$HERE/../check-team-pin.sh" "$app/Contents/MacOS/k3sm-app" "$team" \
+	|| { echo "sign-and-notarize: the app is not pinned to exactly team $team; rebuild it with hack/build-app.sh --team-id $team" >&2; exit 1; }
 
 echo "==> sign the app (inside out, hardened runtime, timestamp)"
 /usr/bin/codesign --force --options runtime --timestamp --sign "$identity" "$app/Contents/MacOS/k3sm-app"

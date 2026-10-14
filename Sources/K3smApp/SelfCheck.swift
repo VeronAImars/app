@@ -20,16 +20,26 @@ import K3smStatus
 import Security
 
 /// SelfCheck gathers what the window needs before it enables a privileged
-/// action: the Team ID stamped at signing time, whether this bundle's own
+/// action: the Team ID compiled into this binary, whether this bundle's own
 /// signature satisfies the designated requirement built from it, and whether
 /// the user is an administrator.
 enum SelfCheck {
     /// The admin group's gid on macOS.
     private static let adminGID: gid_t = 80
 
-    /// The stamped Team ID, if this build carries a valid one.
-    static func teamID(in bundle: Bundle = .main) -> TeamID? {
-        (bundle.object(forInfoDictionaryKey: TeamID.infoPlistKey) as? String).flatMap(TeamID.init)
+    /// The Team ID compiled into this binary (`TeamIDPin`), or nil for a
+    /// developer build. Info.plist is never consulted for it.
+    static func teamID() -> TeamID? {
+        TeamIDPin.teamID
+    }
+
+    /// The account running the app (the passwd entry of `getuid()`, not the
+    /// console session's owner), for `k3sm install --user`: the admin
+    /// kubeconfig goes to that account. Nil when it is root or not a plain
+    /// name.
+    static func consoleUser() -> ConsoleUser? {
+        guard let entry = getpwuid(getuid()) else { return nil }
+        return ConsoleUser(String(cString: entry.pointee.pw_name))
     }
 
     /// The payload version: the bundle's own short version, which the build

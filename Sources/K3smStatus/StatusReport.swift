@@ -66,6 +66,69 @@ public struct StatusRow: Decodable, Equatable, Sendable {
     }
 }
 
+/// StoppedBy is who stopped k3sm on this Mac, from the additive `stoppedBy`
+/// object the CLI prints while a stop marker exists. Every field is data shown
+/// verbatim; `at` stays the CLI's RFC 3339 text. It carries no verdict.
+public struct StoppedBy: Decodable, Equatable, Sendable {
+    /// "user" or "auto" today; any other word is kept as printed.
+    public let actor: String
+    public let reason: String
+    public let at: String
+    /// "stopping" (a stop left something behind) or "stopped".
+    public let phase: String
+
+    public init(actor: String, reason: String, at: String, phase: String) {
+        self.actor = actor
+        self.reason = reason
+        self.at = at
+        self.phase = phase
+    }
+
+    private enum CodingKeys: String, CodingKey { case actor, reason, at, phase }
+
+    /// Decodes tolerantly: a missing or mistyped field reads as "".
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        actor = (try? c.decodeIfPresent(String.self, forKey: .actor)) ?? ""
+        reason = (try? c.decodeIfPresent(String.self, forKey: .reason)) ?? ""
+        at = (try? c.decodeIfPresent(String.self, forKey: .at)) ?? ""
+        phase = (try? c.decodeIfPresent(String.self, forKey: .phase)) ?? ""
+    }
+
+    /// The one line the window shows, for example
+    /// `stopped by user: maintenance window`.
+    public var line: String {
+        let head = "\(phase.isEmpty ? "stopped" : phase) by \(actor.isEmpty ? "someone" : actor)"
+        return reason.isEmpty ? head : head + ": " + reason
+    }
+}
+
+/// StatusWorker is one other node of the cluster, from the additive `workers`
+/// list a server prints. `version` is the node's kubelet version as printed
+/// (`v1.36.2+k3sm.0.1.7`), nil while the node has reported none or the field is
+/// not a string. It is the node's own advisory report, not an attestation.
+public struct StatusWorker: Equatable, Sendable {
+    public let name: String
+    public let role: String
+    public let version: String?
+
+    public init(name: String, role: String, version: String? = nil) {
+        self.name = name
+        self.role = role
+        self.version = version
+    }
+
+    /// The k3sm release inside the kubelet version: the semver build metadata
+    /// after `+k3sm.` (`v1.36.2+k3sm.0.1.7` is `0.1.7`). The Kubernetes
+    /// version before the `+` is not the k3sm release and is never compared.
+    /// Nil when there is no version, no `+k3sm.` marker, or the release does
+    /// not parse: unknown never satisfies a minimum.
+    public var k3smRelease: SemanticVersion? {
+        guard let version, let marker = version.range(of: "+k3sm.") else { return nil }
+        return SemanticVersion(String(version[marker.upperBound...]))
+    }
+}
+
 /// StatusReport is the decoded output of `k3sm status -o json` (rows in
 /// `rows`) or of the cheaper `k3sm status daemons -o json` probe (rows in
 /// `daemons`). Both shapes carry the same top-level fields.
@@ -78,17 +141,52 @@ public struct StatusReport: Decodable, Equatable, Sendable {
     public let role: String
     public let summary: String
     public let rows: [StatusRow]
+    /// Who stopped k3sm, present only while the CLI reports a stop marker. A
+    /// `stoppedBy` value that is not an object decodes as nil rather than
+    /// failing the report.
+    public let stoppedBy: StoppedBy?
+    /// On a server, the cluster's other nodes. Nil means unknown (the field
+    /// is absent, or not a list of named nodes): never read it as "no
+    /// workers". An empty array means the server found there are none.
+    public let workers: [StatusWorker]?
+    /// On a worker, the `host:port` of the server it joined; nil when absent
+    /// or not a string. Shown data only: it passes `ServerAddress` before use.
+    public let joinTarget: String?
 
-    public init(schemaVersion: Int, verdict: Verdict, role: String, summary: String, rows: [StatusRow]) {
+    public init(
+        schemaVersion: Int, verdict: Verdict, role: String, summary: String, rows: [StatusRow],
+        stoppedBy: StoppedBy? = nil, workers: [StatusWorker]? = nil, joinTarget: String? = nil
+    ) {
         self.schemaVersion = schemaVersion
         self.verdict = verdict
         self.role = role
         self.summary = summary
         self.rows = rows
+        self.stoppedBy = stoppedBy
+        self.workers = workers
+        self.joinTarget = joinTarget
     }
 
     private enum CodingKeys: String, CodingKey {
-        case schemaVersion, verdict, role, summary, rows, daemons
+        case schemaVersion, verdict, role, summary, rows, daemons, stoppedBy, workers, joinTarget
+    }
+
+    /// The wire shape of one worker; a node without a string name makes the
+    /// whole list unknown, a mistyped role or version reads as absent.
+    private struct WireWorker: Decodable {
+        let name: String
+        let role: String
+        let version: String?
+
+        enum CodingKeys: String, CodingKey { case name, role, version }
+
+        init(from decoder: Decoder) throws {
+            let c = try decoder.container(keyedBy: CodingKeys.self)
+            name = try c.decode(String.self, forKey: .name)
+            role = (try? c.decodeIfPresent(String.self, forKey: .role)) ?? ""
+            let v = (try? c.decodeIfPresent(String.self, forKey: .version)) ?? nil
+            version = v?.isEmpty == false ? v : nil
+        }
     }
 
     public init(from decoder: Decoder) throws {
@@ -102,6 +200,10 @@ public struct StatusReport: Decodable, Equatable, Sendable {
         } else {
             rows = try c.decodeIfPresent([StatusRow].self, forKey: .daemons) ?? []
         }
+        stoppedBy = (try? c.decodeIfPresent(StoppedBy.self, forKey: .stoppedBy)) ?? nil
+        workers = ((try? c.decodeIfPresent([WireWorker].self, forKey: .workers)) ?? nil)?
+            .map { StatusWorker(name: $0.name, role: $0.role, version: $0.version) }
+        joinTarget = (try? c.decodeIfPresent(String.self, forKey: .joinTarget)) ?? nil
     }
 
     /// Returns the row with the given name, if the report carries one.
