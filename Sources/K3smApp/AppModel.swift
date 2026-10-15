@@ -532,7 +532,7 @@ final class AppModel: ObservableObject {
         return TrustedCLI(
             check: { await Task.detached { SelfCheck.installedCLITrust(team: teamID) }.value },
             execute: { arguments in
-                await CLIProcess.run(path: K3smCLI.path, arguments: arguments, environment: environment, deadline: PollSchedule.killDeadline)
+                await CLIProcess.run(path: K3smCLI.path, arguments: arguments, environment: environment, deadline: PollSchedule.killDeadline, limit: OutputLimit.status)
             })
     }
 
