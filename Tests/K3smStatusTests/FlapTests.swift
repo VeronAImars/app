@@ -53,3 +53,18 @@ struct FlapTests {
         #expect(r >= Flap.restMin && r <= Flap.restMax)
     }
 }
+
+@Suite("dock frame")
+struct DockFrameTests {
+    @Test("outside the console the bundle icon comes back, rendered or not", arguments: [true, false])
+    func outsideConsole(rendered: Bool) {
+        #expect(DockFrame.decide(consoleShown: false, rendered: rendered) == .bundleIcon)
+    }
+
+    @Test("on the console a rendered frame is shown and a failed one keeps the last")
+    func onConsole() {
+        #expect(DockFrame.decide(consoleShown: true, rendered: true) == .newFrame)
+        #expect(DockFrame.decide(consoleShown: true, rendered: false) == .keepLast)
+    }
+}
+

@@ -47,6 +47,9 @@ enum Palette {
     static let fillSoft = Color(red: 0.725, green: 0.773, blue: 1.0)    // #b9c5ff, efficiency cores
     static let fillDim = Color(red: 0.227, green: 0.263, blue: 0.502)   // #3a4380, the rest of memory
     static let okOnDark = Color(red: 0.384, green: 0.902, blue: 0.627)  // #62e6a0, a healthy daemon
+    static let dockMark = Color(red: 0.561, green: 0.643, blue: 1.0)    // #8fa4ff, the mark on the Dock tile
+    static let dockMarkGlow = Color(red: 0.435, green: 0.533, blue: 0.996) // #6f88fe, its glow (the mark's dark-mode upper wing)
+    static let dockTileGlow = Color(red: 0.239, green: 0.357, blue: 1.0) // #3d5bff, the light behind it
 
     static let ok = Color(red: 0.090, green: 0.569, blue: 0.310)
     static let warn = Color(red: 0.722, green: 0.416, blue: 0.0)
