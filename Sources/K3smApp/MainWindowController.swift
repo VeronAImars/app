@@ -15,6 +15,7 @@ limitations under the License.
 */
 
 import AppKit
+import Combine
 import SwiftUI
 
 /// MainWindowController owns the one window. While it is open the app is a
@@ -24,6 +25,7 @@ import SwiftUI
 final class MainWindowController: NSObject, NSWindowDelegate {
     private let model: AppModel
     private var window: NSWindow?
+    private var chrome: AnyCancellable?
 
     init(model: AppModel) {
         self.model = model
@@ -55,6 +57,25 @@ final class MainWindowController: NSObject, NSWindowDelegate {
         window.contentViewController = NSHostingController(rootView: MainView(model: model))
         window.delegate = self
         window.center()
+        chrome = model.$screen.sink { [weak window] screen in window?.setChrome(for: screen) }
         return window
+    }
+}
+
+extension NSWindow {
+    /// The console draws its own top edge: the title bar is transparent and
+    /// the content runs under it, so the traffic lights sit on the panel. The
+    /// first-run form keeps the standard title bar.
+    @MainActor
+    func setChrome(for screen: AppModel.Screen) {
+        let console = screen == .status
+        titlebarAppearsTransparent = console
+        titleVisibility = console ? .hidden : .visible
+        isMovableByWindowBackground = console
+        if console {
+            styleMask.insert(.fullSizeContentView)
+        } else {
+            styleMask.remove(.fullSizeContentView)
+        }
     }
 }

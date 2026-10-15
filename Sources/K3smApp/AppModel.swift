@@ -43,6 +43,13 @@ final class AppModel: ObservableObject {
     private static let tailBytes = 16 * 1024
 
     @Published private(set) var screen: Screen = .firstRun
+    /// Whether the console shows the status panel (start, stop, connections,
+    /// uninstall): the info button and Settings… open it.
+    @Published var statusPanelShown = false
+    /// Which section the console shows in its middle column.
+    @Published var section: ConsoleSection = .workloads
+    /// The console's own state; it polls only while the console is on screen.
+    let workloads: WorkloadsModel
     @Published private(set) var report: StatusReport?
     @Published private(set) var installedVersion: SemanticVersion?
     @Published private(set) var availability: PrivilegedAvailability
@@ -89,6 +96,7 @@ final class AppModel: ObservableObject {
     init(runner: any PrivilegedRunner, environment: [String: String]) {
         self.runner = runner
         self.environment = environment
+        self.workloads = WorkloadsModel(environment: environment)
         self.teamID = SelfCheck.teamID()
         self.user = SelfCheck.consoleUser()
         self.payloadVersion = SelfCheck.payloadVersion()
