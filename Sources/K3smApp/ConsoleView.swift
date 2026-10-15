@@ -35,7 +35,7 @@ struct ConsoleView: View {
 
     var body: some View {
         HStack(spacing: 0) {
-            MacPanel(workloads: app.workloads, report: app.report)
+            MacPanel(workloads: app.workloads, report: app.report, installed: app.installedVersion)
                 .frame(width: 250)
             Divider()
             VStack(spacing: 0) {
@@ -51,8 +51,14 @@ struct ConsoleView: View {
         .background(Color.white)
         .ignoresSafeArea()
         .preferredColorScheme(.light)
-        .onAppear { app.workloads.start() }
-        .onDisappear { app.workloads.stop() }
+        .onAppear {
+            app.workloads.start()
+            app.startReportPolling()
+        }
+        .onDisappear {
+            app.workloads.stop()
+            app.stopReportPolling()
+        }
     }
 
     @ViewBuilder
