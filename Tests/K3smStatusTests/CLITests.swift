@@ -99,6 +99,7 @@ struct CLITests {
         ClipCase(name: "zero-width characters removed", input: "re\u{200B}gis\u{200D}try\u{FEFF}", want: "registry"),
         ClipCase(name: "line separator flattened", input: "a\u{2028}b\u{2029}c", want: "a b c"),
         ClipCase(name: "CRLF is one space", input: "a\r\nb", want: "a b"),
+        ClipCase(name: "tag characters removed", input: "a\u{E0041}b", want: "ab"),
     ]
 
     struct BodyCase: Sendable, CustomTestStringConvertible {
@@ -116,6 +117,7 @@ struct CLITests {
         BodyCase(name: "C1 control removed", input: "a\u{85}b", want: "ab"),
         BodyCase(name: "bidi and zero-width removed", input: "x\u{202E}y\u{2066}z\u{200B}w", want: "xyzw"),
         BodyCase(name: "markdown stays literal", input: "**not bold** [x](y)", want: "**not bold** [x](y)"),
+        BodyCase(name: "non-ASCII letters, marks and emoji kept", input: "\u{E9} e\u{301} \u{65E5}\u{672C} \u{2764}\u{FE0F}", want: "\u{E9} e\u{301} \u{65E5}\u{672C} \u{2764}\u{FE0F}"),
     ]
 
     @Test("body", arguments: bodyCases)
