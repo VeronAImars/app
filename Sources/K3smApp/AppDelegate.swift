@@ -25,6 +25,7 @@ import K3smStatus
 final class AppDelegate: NSObject, NSApplicationDelegate {
     private var model: AppModel?
     private var windowController: MainWindowController?
+    private var mainMenu: MainMenu?
     private var statusItem: StatusItemController?
     private var poller: StatusPoller?
     private var notifier: StoppedNotifier?
@@ -39,6 +40,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let environment = SelfCheck.cliEnvironment()
         let model = AppModel(runner: AppleScriptPrivilegedRunner(), environment: environment)
         let windowController = MainWindowController(model: model)
+        let mainMenu = MainMenu(model: model) { [weak windowController] in windowController?.show() }
+        mainMenu.install()
         let statusItem = StatusItemController(model: model) { [weak windowController] in windowController?.show() }
         let notifier = StoppedNotifier(
             onStart: { [weak model] in model?.perform(.start, expected: .stopped) },
@@ -53,6 +56,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         self.notifier = notifier
         self.model = model
         self.windowController = windowController
+        self.mainMenu = mainMenu
         self.statusItem = statusItem
         self.poller = poller
 

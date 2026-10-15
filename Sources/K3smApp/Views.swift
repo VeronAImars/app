@@ -18,9 +18,23 @@ import K3smInstall
 import K3smStatus
 import SwiftUI
 
-/// MainView is the window: the first-run form or the status, then the log of
-/// the last root step. Every string from the CLI renders verbatim.
+/// MainView is the window. Before k3sm is installed it is the first-run
+/// form; once installed it is the console, with the status panel (start,
+/// stop, connections, uninstall) behind the console's info button.
 struct MainView: View {
+    @ObservedObject var model: AppModel
+
+    var body: some View {
+        switch model.screen {
+        case .firstRun: StatusPanel(model: model)
+        case .status: ConsoleView(app: model)
+        }
+    }
+}
+
+/// StatusPanel is the first-run form or the status, then the log of the last
+/// root step. Every string from the CLI renders verbatim.
+struct StatusPanel: View {
     @ObservedObject var model: AppModel
 
     var body: some View {
