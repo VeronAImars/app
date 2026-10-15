@@ -4,6 +4,7 @@
 #
 # icon-concepts.sh <outdir>
 # icon-concepts.sh --pick <concept> <out.icns>
+# icon-concepts.sh --check
 #
 # Renders the candidate app icons for the maintainers to choose from. Each
 # concept puts the k3sm butterfly mark (Resources/k3sm-mark.svg) on a tile of
@@ -21,12 +22,21 @@
 # and nothing changes until someone runs it. Concepts: night, night-glow,
 # electric, porcelain, breakout, aurora.
 #
+# The third form asks macOS how it draws each concept. It builds every
+# concept's .icns into a throwaway app bundle, reads the icon back from
+# NSWorkspace, and compares a point just inside the tile's corner with the
+# concept's own render. macOS keeps that pixel for an icon it accepts as a
+# tile and replaces it with its grey tile for one it does not (an icon whose
+# content leaves the tile is shrunk into the grey tile). It prints ok or
+# "grey tile" per concept and exits 1 if any concept gets the grey tile.
+#
 # Only the toolchain and the system are used: swift, sips and iconutil.
 set -euo pipefail
 
 usage() {
 	echo "usage: hack/icon-concepts.sh <outdir>" >&2
 	echo "       hack/icon-concepts.sh --pick <concept> <out.icns>" >&2
+	echo "       hack/icon-concepts.sh --check" >&2
 	exit 2
 }
 
@@ -36,7 +46,12 @@ SVG="$ROOT/Resources/k3sm-mark.svg"
 
 PICK=
 OUT=
+CHECK=
 case "${1:-}" in
+--check)
+	[ "$#" -eq 1 ] || usage
+	CHECK=1
+	;;
 --pick)
 	[ "$#" -eq 3 ] || usage
 	PICK="$2"
@@ -242,20 +257,92 @@ let sheet = bitmap(cell.w * columns, cell.h * rows) {
 write(sheet, "sheet")
 SWIFT
 
-if [ -n "$PICK" ]; then
-	echo "==> render $PICK 1024x1024"
-	swift "$work/render.swift" "$SVG" "$work" "$PICK"
-	set_dir="$work/AppIcon.iconset"
+# icns <png> <out.icns> packs a 1024x1024 render into an .icns the way
+# hack/make-icon.sh does.
+icns() {
+	local set_dir
+	set_dir="$(mktemp -d "$work/iconset.XXXXXX")/AppIcon.iconset"
 	mkdir -p "$set_dir"
 	for size in 16 32 128 256 512; do
 		double=$((size * 2))
-		sips -z "$size" "$size" "$work/$PICK.png" --out "$set_dir/icon_${size}x${size}.png" > /dev/null
-		sips -z "$double" "$double" "$work/$PICK.png" --out "$set_dir/icon_${size}x${size}@2x.png" > /dev/null
+		sips -z "$size" "$size" "$1" --out "$set_dir/icon_${size}x${size}.png" > /dev/null
+		sips -z "$double" "$double" "$1" --out "$set_dir/icon_${size}x${size}@2x.png" > /dev/null
 	done
+	iconutil -c icns "$set_dir" -o "$2"
+}
+
+if [ -n "$PICK" ]; then
+	echo "==> render $PICK 1024x1024"
+	swift "$work/render.swift" "$SVG" "$work" "$PICK"
 	echo "==> iconutil -c icns"
-	iconutil -c icns "$set_dir" -o "$OUT"
+	icns "$work/$PICK.png" "$OUT"
 	echo "icon-concepts: $OUT"
 	exit 0
+fi
+
+if [ -n "$CHECK" ]; then
+	echo "==> render every concept"
+	swift "$work/render.swift" "$SVG" "$work"
+	# A bundle id unique to this run keeps a cached icon from an earlier
+	# run out of the answer.
+	stamp="$(date +%s)-$$"
+	for png in "$work"/*.png; do
+		name="$(basename "$png" .png)"
+		[ "$name" = sheet ] && continue
+		app="$work/bundles/$name.app"
+		mkdir -p "$app/Contents/Resources"
+		icns "$png" "$app/Contents/Resources/AppIcon.icns"
+		cat > "$app/Contents/Info.plist" <<PLIST
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0"><dict>
+<key>CFBundleIdentifier</key><string>io.k3sm.icon-check.$name.$stamp</string>
+<key>CFBundleIconFile</key><string>AppIcon</string>
+<key>CFBundlePackageType</key><string>APPL</string>
+</dict></plist>
+PLIST
+	done
+	cat > "$work/check.swift" <<'SWIFT'
+import AppKit
+
+// check <workdir>: for each <workdir>/bundles/<name>.app, compares the icon
+// NSWorkspace draws with <workdir>/<name>.png at a point just inside the
+// tile's corner, on a 256-point canvas.
+let dir = CommandLine.arguments[1]
+func rgb(_ image: NSImage) -> (Double, Double, Double) {
+    let rep = NSBitmapImageRep(
+        bitmapDataPlanes: nil, pixelsWide: 256, pixelsHigh: 256,
+        bitsPerSample: 8, samplesPerPixel: 4, hasAlpha: true, isPlanar: false,
+        colorSpaceName: .deviceRGB, bytesPerRow: 0, bitsPerPixel: 0)!
+    NSGraphicsContext.saveGraphicsState()
+    NSGraphicsContext.current = NSGraphicsContext(bitmapImageRep: rep)
+    NSColor(white: 0.5, alpha: 1).setFill()
+    NSRect(x: 0, y: 0, width: 256, height: 256).fill()
+    image.draw(in: NSRect(x: 0, y: 0, width: 256, height: 256))
+    NSGraphicsContext.restoreGraphicsState()
+    // 45 of 256 is inside the 824-point tile's rounded corner on the
+    // 1024 grid, clear of the system's rim.
+    let c = rep.colorAt(x: 45, y: 45)!
+    return (Double(c.redComponent), Double(c.greenComponent), Double(c.blueComponent))
+}
+let names = (try? FileManager.default.contentsOfDirectory(atPath: "\(dir)/bundles"))?.filter { $0.hasSuffix(".app") }.sorted() ?? []
+var grey = 0
+for app in names {
+    let name = String(app.dropLast(4))
+    let drawn = NSWorkspace.shared.icon(forFile: "\(dir)/bundles/\(app)")
+    drawn.size = NSSize(width: 256, height: 256)
+    guard let own = NSImage(contentsOfFile: "\(dir)/\(name).png") else { continue }
+    let a = rgb(drawn), b = rgb(own)
+    let diff = max(abs(a.0 - b.0), abs(a.1 - b.1), abs(a.2 - b.2))
+    let ok = diff < 0.05
+    if !ok { grey += 1 }
+    print("\(name): \(ok ? "ok" : "grey tile") (corner difference \(String(format: "%.2f", diff)))")
+}
+exit(grey == 0 ? 0 : 1)
+SWIFT
+	echo "==> ask macOS how it draws each concept"
+	swift "$work/check.swift" "$work"
+	exit $?
 fi
 
 mkdir -p -- "$OUT"
