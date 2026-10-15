@@ -158,12 +158,11 @@ final class WorkloadsModel: ObservableObject {
             self.detailLoading = false
             switch outcome {
             case .exited(let status, let stdout):
-                let text = StatusDisplay.body(String(decoding: stdout, as: UTF8.self))
-                self.detailText = status == 0 ? (text.isEmpty ? "Nothing recorded." : text) : "k3sm kubectl exited \(status)"
+                self.detailText = WorkloadsDisplay.detailText(.exited(status: status, stdout: stdout))
             case .truncated(let stdout):
                 // The first OutputLimit.detail bytes, as before; the run was
                 // stopped there instead of read to the end.
-                self.detailText = String(decoding: stdout, as: UTF8.self) + "\n… cut at \(OutputLimit.detail >> 10) KiB"
+                self.detailText = WorkloadsDisplay.detailText(.truncated(stdout: stdout))
             case .missing, .failedToLaunch, .killed, .refused:
                 self.detailText = "the k3sm CLI did not answer"
             }
