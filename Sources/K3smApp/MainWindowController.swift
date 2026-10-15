@@ -16,6 +16,7 @@ limitations under the License.
 
 import AppKit
 import Combine
+import K3smStatus
 import SwiftUI
 
 /// MainWindowController owns the one window. While it is open the app is a
@@ -41,8 +42,16 @@ final class MainWindowController: NSObject, NSWindowDelegate {
         NSApp.activate()
         // While the app is in the Dock, the Dock icon is drawn here: its own
         // tile, still, with the mark flapping on it at the wordmark's angle.
+        // A frame that fails to render leaves the last good one in place.
         dockFlap = model.flap.$angle.removeDuplicates().sink { angle in
-            MainActor.assumeIsolated { NSApp.applicationIconImage = DockIcon.image(angle: angle) }
+            MainActor.assumeIsolated {
+                let image = DockIcon.image(angle: angle)
+                switch DockFrame.decide(consoleShown: true, rendered: image != nil) {
+                case .bundleIcon: NSApp.applicationIconImage = nil
+                case .newFrame: NSApp.applicationIconImage = image
+                case .keepLast: break
+                }
+            }
         }
         if model.screen == .status {
             model.workloads.start()
