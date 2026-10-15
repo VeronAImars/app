@@ -1,0 +1,79 @@
+/*
+Copyright The k3sm Authors.
+
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+    http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+*/
+
+import AppKit
+import K3smStatus
+
+/// FlapModel plays the wordmark butterfly's wing beat while the console is
+/// on screen: a `Flap` beat after each random rest, skipped while Reduce
+/// Motion is on. The window controller starts and stops it with the
+/// console's polls, so nothing runs while the window is closed. Between
+/// beats no timer fires but the one that ends the rest.
+@MainActor
+final class FlapModel: ObservableObject {
+    /// The wings' hinge angle in degrees; 0 is flat.
+    @Published private(set) var angle = 0.0
+    private var restTimer: Timer?
+    private var frameTimer: Timer?
+    private var frames: [Double] = []
+    private var frameIndex = 0
+
+    /// start schedules the first beat; a second start is a no-op.
+    func start() {
+        guard restTimer == nil, frameTimer == nil else { return }
+        rest()
+    }
+
+    /// stop cancels any beat and leaves the wings flat.
+    func stop() {
+        restTimer?.invalidate()
+        restTimer = nil
+        frameTimer?.invalidate()
+        frameTimer = nil
+        angle = 0
+    }
+
+    private func rest() {
+        restTimer = Timer.scheduledTimer(withTimeInterval: Flap.rest(unit: .random(in: 0...1)), repeats: false) { [weak self] _ in
+            MainActor.assumeIsolated { self?.beat() }
+        }
+    }
+
+    private func beat() {
+        restTimer = nil
+        guard !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion else {
+            rest()
+            return
+        }
+        frames = Flap.frames()
+        frameIndex = 0
+        frameTimer = Timer.scheduledTimer(withTimeInterval: 1 / Flap.frameRate, repeats: true) { [weak self] _ in
+            MainActor.assumeIsolated { self?.step() }
+        }
+    }
+
+    private func step() {
+        guard frameIndex < frames.count else {
+            frameTimer?.invalidate()
+            frameTimer = nil
+            angle = 0
+            rest()
+            return
+        }
+        angle = frames[frameIndex]
+        frameIndex += 1
+    }
+}

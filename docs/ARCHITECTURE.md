@@ -22,6 +22,7 @@ library imports AppKit, so every decision is unit-tested without a GUI.
 | `StatusReport`, `Verdict`, `StatusRow` | R1 | decodes `k3sm status -o json` and the `status daemons` probe (schemaVersion 1) |
 | `StoppedBy` | R1 | the additive `stoppedBy` object (who stopped k3sm, why, when, which phase); a missing or malformed value decodes as nil and never fails the report |
 | `NodeRole` | R4 | the closed two-case table from role to daemon label |
+| `Flap` | | the wordmark butterfly's wing beat: the hinge angle at each frame of one beat (two strokes toward the viewer, the second lower, ending flat) and the random rest between beats |
 | `Reading`, `VisibilityTracker` | R6, R7 | classifies one CLI run; show after one running read, hide after two misses |
 | `K3smCLI` | R4, R6 | the absolute CLI path, fixed argument lists (status, version, and the kubectl calls behind the console: pod list, node list, logs, events, manifest), the built environment |
 | `PollSchedule` | R6 | 5 s visible, 15 s hidden, 4 s kill deadline; the full report every 30 s while the console is open |
@@ -68,6 +69,7 @@ library imports AppKit, so every decision is unit-tested without a GUI.
 | `AppDelegate` | A15 | wiring; login-item launch shows only the status item; reopen shows the window; activity assertion against App Nap; pauses polling off the active console session |
 | `StatusPoller`, `CLIProcess` | R6 | serial probe runs with a SIGKILL deadline and a scrubbed environment |
 | `StatusItemController` | R7, L6 | inserts and removes the `NSStatusItem`; logs `status item: visible` only when on screen; respects a user removal; the menu: the Cluster and This Mac status lines (`MenuStatus`, a coloured circle and the word; read from the full report on open, This Mac also from each probe), then Stop and Restart (shown only when lifecycle support is available, never disabled-but-visible), Open Status, Open Logs, Write a Bug Report, Open k3sm, Quit; the icon carries the LAN dot, following each daemons probe |
+| `FlapModel` | | plays a `Flap` beat after each rest while the console is up (started and stopped by the window controller with the console's polls); skips the beat under Reduce Motion; `FlappingButterfly` in `MacPanel` turns each half of the mark about the centre line by its angle |
 | `MenuActions` | L6 | logs through `NSWorkspace` on fixed paths; the status and bug report `.command` files opened in Terminal; never a shell from the app |
 | `StoppedNotifier` | L6 | the login-time stopped notification and its Start action |
 | `MainWindowController`, `Views`, `AppModel` | A9, A15, A16, L6 | SwiftUI in an `NSWindow`; first run (start or join) under the standard title bar; once installed, the console under a transparent full-size title bar (`setChrome`), with the status panel as a popover from its info button and `Settings…`: status with `stoppedBy`, Stop, Restart and Start (or the note when the installed k3sm lacks them), the LAN access checkbox, Update (by `UpdatePolicy`) and Uninstall (with the purge checkbox); `.regular` while open, `.accessory` after; tails the copy-out log |

@@ -41,6 +41,7 @@ final class MainWindowController: NSObject, NSWindowDelegate {
         if model.screen == .status {
             model.workloads.start()
             model.startReportPolling()
+            model.flap.start()
         }
         Task { await model.refresh() }
     }
@@ -51,6 +52,7 @@ final class MainWindowController: NSObject, NSWindowDelegate {
     func windowWillClose(_ notification: Notification) {
         model.workloads.stop()
         model.stopReportPolling()
+        model.flap.stop()
         NSApp.setActivationPolicy(.accessory)
     }
 
