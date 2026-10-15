@@ -140,10 +140,16 @@ private final class OutputBuffer: Sendable {
 /// RunControl is the one place a run's child is killed: at the deadline,
 /// past the output limit, or on cancellation, whichever comes first.
 ///
-/// The pid cannot be reused before the termination handler runs: the
-/// process is not reaped until then, so a kill sent while `exited` is false
-/// reaches only this run. A stop that arrives before the launch is held and
-/// applied the moment the pid is known.
+/// Foundation reaps the child and then runs the termination handler, so a
+/// kill sent while `exited` is false can in principle meet a pid released a
+/// moment earlier; macOS allocates pids sequentially, so that window is
+/// negligible. A stop that arrives before the launch is held and applied the
+/// moment the pid is known.
+///
+/// The signal reaches the direct child only. The `k3sm kubectl` wrapper
+/// forks `kubectl` and waits for it, so a killed wrapper leaves that
+/// grandchild running until it next writes to the closed pipe or finishes
+/// on its own; closing that gap is the wrapper's to do.
 private final class RunControl: Sendable {
     private struct State {
         var pid: pid_t = 0
