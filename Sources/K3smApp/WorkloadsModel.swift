@@ -157,7 +157,7 @@ final class WorkloadsModel: ObservableObject {
             self.detailLoading = false
             switch outcome {
             case .exited(let status, let stdout):
-                let text = String(decoding: stdout.prefix(Self.detailBytes), as: UTF8.self)
+                let text = StatusDisplay.body(String(decoding: stdout.prefix(Self.detailBytes), as: UTF8.self))
                 self.detailText = status == 0 ? (text.isEmpty ? "Nothing recorded." : text) : "k3sm kubectl exited \(status)"
             case .missing, .failedToLaunch, .killed, .refused:
                 self.detailText = "the k3sm CLI did not answer"
