@@ -246,6 +246,8 @@ third-party dependencies.
 The app icon, `Resources/AppIcon.icns`, is generated from the k3sm butterfly
 mark in `Resources/k3sm-mark.svg` by `hack/make-icon.sh`; rerun it after the
 mark changes and commit the result.
+Candidate icons with a tile of their own are in `docs/icon-concepts/`,
+rendered by `hack/icon-concepts.sh`.
 
 ```sh
 swift build
