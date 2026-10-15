@@ -258,7 +258,7 @@ if [ -n "$PICK" ]; then
 	exit 0
 fi
 
-mkdir -p "$OUT"
+mkdir -p -- "$OUT"
 echo "==> render every concept"
 swift "$work/render.swift" "$SVG" "$work"
 for png in "$work"/*.png; do
