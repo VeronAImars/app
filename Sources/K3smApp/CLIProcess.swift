@@ -37,8 +37,9 @@ enum CLIOutcome: Sendable {
 
 /// CLIProcess runs the k3sm CLI by absolute path with the environment the
 /// caller built, collects at most `limit` bytes of its standard output, and
-/// kills it at the deadline or when its output passes the limit. It runs on
-/// a background thread; callers await the outcome.
+/// kills it at the deadline, when its output passes the limit, or when the
+/// task awaiting it is cancelled. It runs on a background thread; callers
+/// await the outcome.
 enum CLIProcess {
     /// How long to wait for the output pipe to close after the process exits.
     /// A grandchild that inherited the pipe can hold it open; the run does not
@@ -50,10 +51,16 @@ enum CLIProcess {
             return .missing
         }
         let control = RunControl()
-        return await withCheckedContinuation { continuation in
-            DispatchQueue.global(qos: .utility).async {
-                continuation.resume(returning: runBlocking(path: path, arguments: arguments, environment: environment, deadline: deadline, limit: limit, control: control))
+        return await withTaskCancellationHandler {
+            await withCheckedContinuation { continuation in
+                DispatchQueue.global(qos: .utility).async {
+                    continuation.resume(returning: runBlocking(path: path, arguments: arguments, environment: environment, deadline: deadline, limit: limit, control: control))
+                }
             }
+        } onCancel: {
+            // A cancelled caller drops the result, so the child need not run
+            // on to its deadline: a run of tab clicks ends each earlier run.
+            control.stop()
         }
     }
 
@@ -130,8 +137,8 @@ private final class OutputBuffer: Sendable {
     }
 }
 
-/// RunControl is the one place a run's child is killed: at the deadline or
-/// past the output limit, whichever comes first.
+/// RunControl is the one place a run's child is killed: at the deadline,
+/// past the output limit, or on cancellation, whichever comes first.
 ///
 /// The pid cannot be reused before the termination handler runs: the
 /// process is not reaped until then, so a kill sent while `exited` is false
