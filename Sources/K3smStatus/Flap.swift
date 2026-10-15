@@ -53,6 +53,13 @@ public enum Flap {
         return (0...count).map { angle(at: Double($0) / frameRate) }
     }
 
+    /// plays is whether a beat that has come due plays: not while the
+    /// system's Reduce Motion setting is on, and not while the window is
+    /// miniaturized or fully covered, where nobody would see it.
+    public static func plays(reduceMotion: Bool, windowVisible: Bool) -> Bool {
+        !reduceMotion && windowVisible
+    }
+
     /// rest is the wait before the next beat for `unit` in 0...1 (a random
     /// draw), from `restMin` to `restMax`; a value outside is clamped.
     public static func rest(unit: Double) -> TimeInterval {

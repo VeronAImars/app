@@ -26,6 +26,11 @@ import K3smStatus
 final class FlapModel: ObservableObject {
     /// The wings' hinge angle in degrees; 0 is flat.
     @Published private(set) var angle = 0.0
+    /// Whether the window can be seen, asked when a beat comes due: false
+    /// while it is miniaturized or fully covered. The window controller
+    /// supplies it; a skipped beat is like one under Reduce Motion, and the
+    /// rests go on.
+    var windowVisible: @MainActor () -> Bool = { true }
     private var restTimer: Timer?
     private var frameTimer: Timer?
     private var frames: [Double] = []
@@ -54,7 +59,7 @@ final class FlapModel: ObservableObject {
 
     private func beat() {
         restTimer = nil
-        guard !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion else {
+        guard Flap.plays(reduceMotion: NSWorkspace.shared.accessibilityDisplayShouldReduceMotion, windowVisible: windowVisible()) else {
             rest()
             return
         }

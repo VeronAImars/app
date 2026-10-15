@@ -52,6 +52,13 @@ struct FlapTests {
         let r = Flap.rest(unit: unit)
         #expect(r >= Flap.restMin && r <= Flap.restMax)
     }
+
+    @Test("a beat plays only with motion allowed and the window visible", arguments: [
+        (false, true, true), (true, true, false), (false, false, false), (true, false, false),
+    ])
+    func plays(reduceMotion: Bool, windowVisible: Bool, want: Bool) {
+        #expect(Flap.plays(reduceMotion: reduceMotion, windowVisible: windowVisible) == want)
+    }
 }
 
 @Suite("dock frame")

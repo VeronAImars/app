@@ -88,6 +88,14 @@ final class MainWindowController: NSObject, NSWindowDelegate {
         window.isReleasedWhenClosed = false
         window.contentViewController = NSHostingController(rootView: MainView(model: model))
         window.delegate = self
+        // The flap asks this when a beat comes due: miniaturized, ordered
+        // out or with the app hidden, the window is not visible and the
+        // beat is skipped. occlusionState is not used: on macOS 26 it does
+        // not report .visible for this window even while it is on screen.
+        model.flap.windowVisible = { [weak self] in
+            guard let window = self?.window else { return false }
+            return window.isVisible && !window.isMiniaturized && !NSApp.isHidden
+        }
         window.center()
         chrome = model.$screen.sink { [weak window] screen in window?.setChrome(for: screen) }
         return window
