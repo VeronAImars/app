@@ -18,8 +18,8 @@
 # The second form builds an .icns from one concept, the same way
 # hack/make-icon.sh builds the current icon, so adopting a concept is
 #   hack/icon-concepts.sh --pick <concept> Resources/AppIcon.icns
-# and nothing changes until someone runs it. Concepts: night, electric,
-# porcelain, breakout, aurora.
+# and nothing changes until someone runs it. Concepts: night, night-glow,
+# electric, porcelain, breakout, aurora.
 #
 # Only the toolchain and the system are used: swift, sips and iconutil.
 set -euo pipefail
@@ -153,6 +153,14 @@ let concepts: [Concept] = [
         }
         drawMark(mark(upper: "#8fa4ff", lower: "#3d5bff"), glow: shadow(rgb(0x6f88fe, 0.9), blur: 40))
         gloss()
+    },
+    Concept(name: "night-glow", title: "Night glow: one-tone wings, as the Dock flap draws") {
+        drawTile {
+            NSGradient(colors: navy)!.draw(in: tile, angle: -90)
+            NSGradient(colors: [rgb(0x3d5bff, 0.55), rgb(0x3d5bff, 0)])!
+                .draw(fromCenter: NSPoint(x: 512, y: 512), radius: 0, toCenter: NSPoint(x: 512, y: 512), radius: 380, options: [])
+        }
+        drawMark(mark(upper: "#8fa4ff", lower: "#8fa4ff"), glow: shadow(rgb(0x6f88fe, 0.9), blur: 72))
     },
     Concept(name: "electric", title: "Electric: brand blue, white mark") {
         drawTile { NSGradient(colors: [rgb(0x2d48fe), rgb(0x022ffb), rgb(0x011389)])!.draw(in: tile, angle: -60) }
