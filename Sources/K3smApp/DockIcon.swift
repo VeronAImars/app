@@ -30,12 +30,12 @@ struct DockIcon: View {
             let tile = side * 824 / 1024
             ZStack {
                 RoundedRectangle(cornerRadius: tile * 185 / 824, style: .continuous)
-                    .fill(LinearGradient(colors: [Color(red: 0.067, green: 0.102, blue: 0.361), Color(red: 0.027, green: 0.051, blue: 0.239)], startPoint: .top, endPoint: .bottom))
-                    .overlay(RadialGradient(colors: [Color(red: 0.239, green: 0.357, blue: 1).opacity(0.55), .clear], center: .center, startRadius: 0, endRadius: tile * 0.46).clipShape(RoundedRectangle(cornerRadius: tile * 185 / 824, style: .continuous)))
+                    .fill(LinearGradient(colors: [Palette.deep2, Palette.deep], startPoint: .top, endPoint: .bottom))
+                    .overlay(RadialGradient(colors: [Palette.dockTileGlow.opacity(0.55), .clear], center: .center, startRadius: 0, endRadius: tile * 0.46).clipShape(RoundedRectangle(cornerRadius: tile * 185 / 824, style: .continuous)))
                     .frame(width: tile, height: tile)
                     .shadow(color: .black.opacity(0.35), radius: side * 0.027, y: side * 0.014)
-                FlappingButterfly(angle: angle, color: Color(red: 0.561, green: 0.643, blue: 1))
-                    .shadow(color: Color(red: 0.435, green: 0.533, blue: 0.996).opacity(0.9), radius: side * 0.035)
+                FlappingButterfly(angle: angle, color: Palette.dockMark)
+                    .shadow(color: Palette.dockMarkGlow.opacity(0.9), radius: side * 0.035)
                     .frame(width: side * 0.62, height: side * 0.62)
             }
             .frame(width: side, height: side)
