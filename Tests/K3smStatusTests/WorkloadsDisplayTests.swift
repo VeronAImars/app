@@ -1,0 +1,88 @@
+/*
+Copyright The k3sm Authors.
+
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+    http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+*/
+
+import Foundation
+import Testing
+
+@testable import K3smStatus
+
+@Suite("classify one workloads run")
+struct WorkloadsReadingTests {
+    @Test("a decoded list, empty or not, is listed")
+    func listed() throws {
+        let r = WorkloadsReading.classify(exitCode: 0, stdout: try fixture("kubectl_pods_empty.json"))
+        #expect(r == .listed(Workloads(pods: [])))
+        if case .listed(let w) = WorkloadsReading.classify(exitCode: 0, stdout: try fixture("kubectl_pods_running.json")) {
+            #expect(w.pods.count == 3)
+        } else {
+            Issue.record("the live list did not classify as listed")
+        }
+    }
+
+    @Test("a non-zero exit is a CLI error, never an empty cluster")
+    func exitCode() throws {
+        #expect(WorkloadsReading.classify(exitCode: 1, stdout: try fixture("kubectl_pods_running.json")) == .cliError("k3sm kubectl exited 1"))
+    }
+
+    @Test("another kind and garbage are CLI errors that say so")
+    func wrongOutput() throws {
+        #expect(WorkloadsReading.classify(exitCode: 0, stdout: try fixture("kubectl_services_list.json")) == .cliError("kubectl returned a List, not a pod list"))
+        #expect(WorkloadsReading.classify(exitCode: 0, stdout: Data("error: no cluster".utf8)) == .cliError("the pod list could not be read"))
+    }
+}
+
+@Suite("workloads display strings")
+struct WorkloadsDisplayTests {
+    @Test("runs as", arguments: [(WorkloadKind.nativeProcess, "Process"), (.linuxVM, "Linux VM"), (.other("wasm"), "wasm")])
+    func runsAs(_ c: (WorkloadKind, String)) {
+        #expect(WorkloadsDisplay.runsAs(c.0) == c.1)
+    }
+
+    @Test("cores")
+    func cores() {
+        #expect(WorkloadsDisplay.cores(nil) == "")
+        #expect(WorkloadsDisplay.cores(0.25) == "0.25")
+        #expect(WorkloadsDisplay.cores(2) == "2")
+        #expect(WorkloadsDisplay.cores(1.5) == "1.5")
+    }
+
+    @Test("bytes")
+    func bytes() {
+        #expect(WorkloadsDisplay.bytes(nil) == "")
+        #expect(WorkloadsDisplay.bytes(0) == "")
+        #expect(WorkloadsDisplay.bytes(268_435_456) == "256 MB")
+        #expect(WorkloadsDisplay.bytes(1_610_612_736) == "1.5 GB")
+        #expect(WorkloadsDisplay.bytes(21_474_836_480) == "20 GB")
+        #expect(WorkloadsDisplay.bytes(2048) == "2 KB")
+    }
+
+    @Test("age")
+    func age() {
+        let now = Date(timeIntervalSince1970: 1_000_000)
+        #expect(WorkloadsDisplay.age(nil, now: now) == "")
+        #expect(WorkloadsDisplay.age(now.addingTimeInterval(-12), now: now) == "12s")
+        #expect(WorkloadsDisplay.age(now.addingTimeInterval(-11 * 60), now: now) == "11 min")
+        #expect(WorkloadsDisplay.age(now.addingTimeInterval(-5 * 3600), now: now) == "5 h")
+        #expect(WorkloadsDisplay.age(now.addingTimeInterval(-6 * 86_400), now: now) == "6 d")
+        #expect(WorkloadsDisplay.age(now.addingTimeInterval(60), now: now) == "0s")
+    }
+
+    @Test("group title")
+    func groupTitle() {
+        #expect(WorkloadsDisplay.groupTitle(namespace: "default", count: 1) == "default · 1 pod")
+        #expect(WorkloadsDisplay.groupTitle(namespace: "ml", count: 4) == "ml · 4 pods")
+    }
+}

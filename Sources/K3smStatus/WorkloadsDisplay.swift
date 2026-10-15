@@ -1,0 +1,90 @@
+/*
+Copyright The k3sm Authors.
+
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+    http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+*/
+
+import Foundation
+
+/// WorkloadsReading classifies one run of the workloads list the way `Reading`
+/// classifies a status probe: what the window may conclude from the exit and
+/// the bytes, so a CLI failure is never shown as an empty cluster.
+public enum WorkloadsReading: Equatable, Sendable {
+    /// The list decoded; it may be empty, which is a cluster with no pods.
+    case listed(Workloads)
+    /// The CLI exited non-zero, or its output was not a pod list.
+    case cliError(String)
+    /// The CLI is not installed at its absolute path.
+    case binaryMissing
+
+    /// Classifies a run from its exit status and standard output.
+    public static func classify(exitCode: Int32, stdout: Data) -> WorkloadsReading {
+        guard exitCode == 0 else {
+            return .cliError("k3sm kubectl exited \(exitCode)")
+        }
+        do {
+            return .listed(try Workloads.decode(stdout))
+        } catch WorkloadsDecodeError.notAPodList(let kind) {
+            return .cliError("kubectl returned a \(kind), not a pod list")
+        } catch {
+            return .cliError("the pod list could not be read")
+        }
+    }
+}
+
+/// WorkloadsDisplay turns a pod into the strings the list shows: how it runs,
+/// its requests, its age. Every string from the API is clipped like status text.
+public enum WorkloadsDisplay {
+    /// "Process" or "Linux VM", or the RuntimeClass name verbatim and clipped.
+    public static func runsAs(_ kind: WorkloadKind) -> String {
+        switch kind {
+        case .nativeProcess: return "Process"
+        case .linuxVM: return "Linux VM"
+        case .other(let name): return StatusDisplay.clip(name)
+        }
+    }
+
+    /// Cores as the list shows them: "0.25", "2", or "" when nothing was requested.
+    public static func cores(_ value: Double?) -> String {
+        guard let v = value else { return "" }
+        if v == v.rounded() { return String(Int(v)) }
+        return String(format: v < 1 ? "%.2f" : "%.1f", v)
+    }
+
+    /// Bytes as the list shows them: "256 MB", "1.5 GB", or "" when nothing was requested.
+    public static func bytes(_ value: Int64?) -> String {
+        guard let b = value, b > 0 else { return "" }
+        let gb = Double(b) / 1_073_741_824
+        if gb >= 1 { return String(format: gb < 10 ? "%.1f GB" : "%.0f GB", gb) }
+        let mb = Double(b) / 1_048_576
+        if mb >= 1 { return String(format: "%.0f MB", mb) }
+        return String(format: "%.0f KB", Double(b) / 1024)
+    }
+
+    /// The pod's age as the list shows it: "12s", "3 min", "5 h", "2 d".
+    public static func age(_ created: Date?, now: Date = Date()) -> String {
+        guard let created else { return "" }
+        let seconds = max(0, now.timeIntervalSince(created))
+        switch seconds {
+        case ..<60: return "\(Int(seconds))s"
+        case ..<3600: return "\(Int(seconds / 60)) min"
+        case ..<172_800: return "\(Int(seconds / 3600)) h"
+        default: return "\(Int(seconds / 86_400)) d"
+        }
+    }
+
+    /// The list's group header: the namespace and its pod count.
+    public static func groupTitle(namespace: String, count: Int) -> String {
+        "\(StatusDisplay.clip(namespace)) · \(count) \(count == 1 ? "pod" : "pods")"
+    }
+}
