@@ -67,9 +67,11 @@ struct ConsoleView: View {
         .onAppear {
             app.workloads.start()
             app.startReportPolling()
+            app.flap.start()
         }
         .onDisappear {
             app.workloads.stop()
+            app.flap.stop()
             app.stopReportPolling()
         }
     }

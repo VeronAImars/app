@@ -48,7 +48,7 @@ struct MacPanel: View {
     /// scrolls, so nothing is cut off in a short window.
     private var content: some View {
         VStack(alignment: .leading, spacing: 18) {
-            Wordmark()
+            Wordmark(flap: app.flap)
                 .padding(.top, 44)
             if PanelMode.showsSwitch(nodeCount: cluster.nodeCount) {
                 HStack(spacing: 6) {
@@ -247,9 +247,11 @@ struct MacPanel: View {
 
 /// Wordmark is the k3sm mark and name, under the window controls.
 struct Wordmark: View {
+    @ObservedObject var flap: FlapModel
+
     var body: some View {
         HStack(spacing: 9) {
-            Butterfly().fill(.white).frame(width: 24, height: 24)
+            FlappingButterfly(angle: flap.angle).frame(width: 24, height: 24)
             Text("k3sm").font(.system(size: 19, weight: .semibold)).foregroundStyle(.white)
         }
     }
@@ -370,5 +372,32 @@ struct PanelChipStyle: ButtonStyle {
             .overlay(Capsule().strokeBorder(Color.white.opacity(selected ? 0 : 0.3), lineWidth: 1))
             .contentShape(Capsule())
             .opacity(configuration.isPressed ? 0.8 : 1)
+    }
+}
+
+/// FlappingButterfly is the mark with each wing hinged at the body: the left
+/// and right halves turn about the vertical centre line by `angle` degrees in
+/// opposite directions, in perspective, so the wings swing toward the viewer.
+/// At 0 it draws exactly the flat mark.
+struct FlappingButterfly: View {
+    let angle: Double
+
+    var body: some View {
+        ZStack {
+            wing(left: true).rotation3DEffect(.degrees(angle), axis: (x: 0, y: 1, z: 0), anchor: .center, perspective: 0.5)
+            wing(left: false).rotation3DEffect(.degrees(-angle), axis: (x: 0, y: 1, z: 0), anchor: .center, perspective: 0.5)
+        }
+        .accessibilityHidden(true)
+    }
+
+    /// wing is the half of the mark on the left (`left`) or right of the
+    /// centre line.
+    private func wing(left: Bool) -> some View {
+        Butterfly().fill(.white).mask {
+            HStack(spacing: 0) {
+                Rectangle().opacity(left ? 1 : 0)
+                Rectangle().opacity(left ? 0 : 1)
+            }
+        }
     }
 }

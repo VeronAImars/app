@@ -64,6 +64,8 @@ final class AppModel: ObservableObject {
     static let inspectorShownKey = "consoleInspectorShown"
     /// The console's own state; it polls only while the console is on screen.
     let workloads: WorkloadsModel
+    /// The wordmark butterfly's wing beat, played while the console is up.
+    let flap = FlapModel()
     @Published private(set) var report: StatusReport?
     @Published private(set) var installedVersion: SemanticVersion?
     @Published private(set) var availability: PrivilegedAvailability
