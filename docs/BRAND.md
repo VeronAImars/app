@@ -81,7 +81,7 @@ needs a maintainer ruling, not a silent fix.
    `#c9302c` are the same in both appearances and differ from the site's
    good `#216e45` and warn `#875810` (the site has no "bad" role). The app
    draws them as dots, so the bar is 3:1 for non-text (WCAG 1.4.11), which
-   they meet: the lowest is bad on the dark surface `#1e1e1e`, 3.13:1.
+   they meet: the lowest is bad on the dark surface `#1e1e1e` (the dark window background as measured, a system colour), 3.13:1.
 4. **The mark's dark colours.** Of the SVG's dark wing values, `Palette`
    carries `#6f88fe` only as `dockMarkGlow` (the Dock mark's glow, #27) and
    `#2d48fe` not at all; the dark `navy` is the site's dark accent `#7d97ff`
