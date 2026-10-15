@@ -88,3 +88,31 @@ public enum WorkloadsDisplay {
         "\(StatusDisplay.clip(namespace)) · \(count) \(count == 1 ? "pod" : "pods")"
     }
 }
+
+/// DetailRead is how one run for the inspector's logs, events or manifest
+/// ended, as far as the text shown depends on it.
+public enum DetailRead: Sendable {
+    /// The run exited with `status`; `stdout` is all it wrote.
+    case exited(status: Int32, stdout: Data)
+    /// The run passed `OutputLimit.detail` and was stopped; `stdout` is the
+    /// first bytes.
+    case truncated(stdout: Data)
+}
+
+extension WorkloadsDisplay {
+    /// detailText is the inspector body for a run: its output through
+    /// `StatusDisplay.body` on success, with a closing line where a
+    /// truncated run was cut, a fixed line for an empty success, and the
+    /// exit status otherwise. Every byte the cluster wrote passes the same
+    /// filter whichever way the run ended.
+    public static func detailText(_ read: DetailRead) -> String {
+        switch read {
+        case .exited(let status, let stdout):
+            guard status == 0 else { return "k3sm kubectl exited \(status)" }
+            let text = StatusDisplay.body(String(decoding: stdout, as: UTF8.self))
+            return text.isEmpty ? "Nothing recorded." : text
+        case .truncated(let stdout):
+            return StatusDisplay.body(String(decoding: stdout, as: UTF8.self)) + "\n… cut at \(OutputLimit.detail >> 10) KiB"
+        }
+    }
+}

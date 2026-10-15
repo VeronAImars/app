@@ -86,3 +86,25 @@ struct WorkloadsDisplayTests {
         #expect(WorkloadsDisplay.groupTitle(namespace: "ml", count: 4) == "ml · 4 pods")
     }
 }
+
+@Suite("inspector detail text")
+struct DetailTextTests {
+    @Test("a successful run is filtered")
+    func exitedFiltered() {
+        let text = WorkloadsDisplay.detailText(.exited(status: 0, stdout: Data("ok\u{202E}txt.exe\r\nnext".utf8)))
+        #expect(text == "oktxt.exe\nnext")
+    }
+
+    @Test("a truncated run is filtered too, then marked where it was cut")
+    func truncatedFiltered() {
+        let text = WorkloadsDisplay.detailText(.truncated(stdout: Data("log\u{202E}gnp.exe\u{1B}[0m".utf8)))
+        #expect(text == "loggnp.exe[0m\n… cut at 64 KiB")
+        #expect(!text.unicodeScalars.contains { $0.properties.generalCategory == .format || $0 == "\u{1B}" })
+    }
+
+    @Test("an empty success and a failed exit read as fixed lines")
+    func fixedLines() {
+        #expect(WorkloadsDisplay.detailText(.exited(status: 0, stdout: Data())) == "Nothing recorded.")
+        #expect(WorkloadsDisplay.detailText(.exited(status: 1, stdout: Data("x".utf8))) == "k3sm kubectl exited 1")
+    }
+}
