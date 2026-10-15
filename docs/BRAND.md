@@ -31,8 +31,9 @@ Rules:
 
 - Change the mark in the SVG first, then regenerate the icon and update
   `Butterfly.swift` from it. Never edit one copy alone.
-- Never recolour the mark outside the four values above, and never add
-  outlines, gradients or shadows to the mark itself.
+- Never recolour the two-tone mark outside the four values above, and never add
+  outlines, gradients or shadows to the mark itself. The single-colour forms
+  (template, silhouette) take their colour from the surface they sit on.
 - The name is written `k3sm`, lowercase, everywhere, including the start of
   a sentence.
 
@@ -51,8 +52,8 @@ value. The site's roles, for reference:
 | line / line strong | `#e4e6ea` / `#b9bec6` | `#23262c` / `#454a53` |
 | good / warn | `#216e45` / `#875810` | `#4cc287` / `#e0a33e` |
 
-Text colours meet WCAG AA (4.5:1) against the surface they sit on, in both
-appearances.
+The site's text colours meet WCAG AA (4.5:1) against the surface they sit on,
+in both appearances. The app's do not yet; see items 3 and 4 below.
 
 ## Type
 
