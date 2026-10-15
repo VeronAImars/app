@@ -116,6 +116,32 @@ public enum StatusDisplay {
         return String(flat.prefix(maxLength - 1)) + "…"
     }
 
+    /// Returns cluster output safe to show as a block of text (the
+    /// inspector's logs, events and manifest): line breaks and tabs are kept,
+    /// a carriage return or a line or paragraph separator becomes a line
+    /// break, other control characters are removed, and format characters are
+    /// removed as in `clip`. The caller has already capped the length.
+    public static func body(_ text: String) -> String {
+        var scalars = String.UnicodeScalarView()
+        var afterReturn = false
+        for scalar in text.unicodeScalars {
+            let category = scalar.properties.generalCategory
+            defer { afterReturn = scalar == "\r" }
+            switch scalar {
+            case "\n":
+                if !afterReturn { scalars.append(scalar) }
+            case "\t":
+                scalars.append(scalar)
+            case "\r", "\u{2028}", "\u{2029}":
+                scalars.append("\n")
+            default:
+                if category == .control || category == .format { continue }
+                scalars.append(scalar)
+            }
+        }
+        return String(scalars)
+    }
+
     /// breaksLine is whether `scalar` would break or rewrite a single line:
     /// a control character or a line or paragraph separator.
     private static func breaksLine(_ scalar: Unicode.Scalar) -> Bool {

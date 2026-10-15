@@ -101,6 +101,28 @@ struct CLITests {
         ClipCase(name: "CRLF is one space", input: "a\r\nb", want: "a b"),
     ]
 
+    struct BodyCase: Sendable, CustomTestStringConvertible {
+        let name: String
+        let input: String
+        let want: String
+        var testDescription: String { name }
+    }
+
+    static let bodyCases: [BodyCase] = [
+        BodyCase(name: "lines and tabs kept", input: "a\n\tb\nc", want: "a\n\tb\nc"),
+        BodyCase(name: "CRLF and CR become one line break", input: "a\r\nb\rc", want: "a\nb\nc"),
+        BodyCase(name: "separators become line breaks", input: "a\u{2028}b\u{2029}c", want: "a\nb\nc"),
+        BodyCase(name: "escape and NUL removed", input: "\u{1B}[31mred\u{0}", want: "[31mred"),
+        BodyCase(name: "C1 control removed", input: "a\u{85}b", want: "ab"),
+        BodyCase(name: "bidi and zero-width removed", input: "x\u{202E}y\u{2066}z\u{200B}w", want: "xyzw"),
+        BodyCase(name: "markdown stays literal", input: "**not bold** [x](y)", want: "**not bold** [x](y)"),
+    ]
+
+    @Test("body", arguments: bodyCases)
+    func body(_ c: BodyCase) {
+        #expect(StatusDisplay.body(c.input) == c.want)
+    }
+
     @Test("clip", arguments: clipCases)
     func clip(_ c: ClipCase) {
         #expect(StatusDisplay.clip(c.input) == c.want)
