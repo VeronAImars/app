@@ -42,6 +42,12 @@ struct WorkloadsReadingTests {
         #expect(WorkloadsReading.classify(exitCode: 0, stdout: try fixture("kubectl_services_list.json")) == .cliError("kubectl returned a List, not a pod list"))
         #expect(WorkloadsReading.classify(exitCode: 0, stdout: Data("error: no cluster".utf8)) == .cliError("the pod list could not be read"))
     }
+
+    @Test("a hostile kind reaches the error text without its line breaks or format characters")
+    func hostileKind() {
+        let json = #"{"kind":"Evil\u202e\nList","items":[]}"#
+        #expect(WorkloadsReading.classify(exitCode: 0, stdout: Data(json.utf8)) == .cliError("kubectl returned a Evil List, not a pod list"))
+    }
 }
 
 @Suite("workloads display strings")
@@ -84,5 +90,66 @@ struct WorkloadsDisplayTests {
     func groupTitle() {
         #expect(WorkloadsDisplay.groupTitle(namespace: "default", count: 1) == "default · 1 pod")
         #expect(WorkloadsDisplay.groupTitle(namespace: "ml", count: 4) == "ml · 4 pods")
+    }
+}
+
+@Suite("the console's search and selection")
+struct WorkloadsSelectionTests {
+    static let pods = [
+        testPod("web-7c9d", namespace: "shop", image: "ghcr.io/acme/Web:2"),
+        testPod("db-0", namespace: "shop", image: "postgres:16"),
+        testPod("hello-native", image: "registry.local/hello:1"),
+        testPod("long", image: "registry.local/" + String(repeating: "a", count: 200) + "/hidden-tail:1"),
+        testPod("bidi\u{202E}lave", image: "registry.local/bidi:1"),
+    ]
+
+    struct SearchCase: Sendable, CustomTestStringConvertible {
+        let name: String
+        let query: String
+        let want: [String]
+        var testDescription: String { name }
+    }
+
+    @Test("the search matches a pod's name or image, ignoring case", arguments: [
+        SearchCase(name: "empty query keeps every pod", query: "", want: pods.map(\.name)),
+        SearchCase(name: "by name", query: "DB", want: ["db-0"]),
+        SearchCase(name: "by image", query: "postgres", want: ["db-0"]),
+        SearchCase(name: "image case ignored", query: "acme/web", want: ["web-7c9d"]),
+        SearchCase(name: "name and image both match", query: "hello", want: ["hello-native"]),
+        SearchCase(name: "namespace is not searched", query: "shop", want: []),
+        SearchCase(name: "no match", query: "redis", want: []),
+        SearchCase(name: "a query never spans the name and the image", query: "7c9d ghcr", want: []),
+        SearchCase(name: "the part of an image the list cuts off does not match", query: "hidden-tail", want: []),
+        SearchCase(name: "a format character the list removes is not needed to match", query: "bidilave", want: ["bidi\u{202E}lave"]),
+        SearchCase(name: "a format character in the query matches nothing shown", query: "bidi\u{202E}", want: []),
+    ])
+    func searchPredicate(_ c: SearchCase) {
+        #expect(WorkloadsDisplay.visible(Self.pods, query: c.query).map(\.name) == c.want)
+    }
+
+    struct SelectionCase: Sendable, CustomTestStringConvertible {
+        let name: String
+        let selected: String?
+        let pods: [Pod]?
+        let want: SelectionChange
+        var testDescription: String { name }
+    }
+
+    @Test("a poll keeps, picks or clears the selection", arguments: [
+        SelectionCase(name: "nothing selected picks the first pod", selected: nil, pods: pods, want: .select("shop/web-7c9d")),
+        SelectionCase(name: "a listed pod stays selected", selected: "default/hello-native", pods: pods, want: .keep),
+        SelectionCase(name: "a pod gone from the list clears", selected: "default/gone", pods: pods, want: .clear),
+        SelectionCase(name: "the same name in another namespace is another pod", selected: "default/db-0", pods: pods, want: .clear),
+        SelectionCase(name: "a list that did not read clears", selected: "shop/db-0", pods: nil, want: .clear),
+        SelectionCase(name: "an empty list with nothing selected clears", selected: nil, pods: [], want: .clear),
+        SelectionCase(name: "no list with nothing selected clears", selected: nil, pods: nil, want: .clear),
+    ])
+    func selectionFallback(_ c: SelectionCase) {
+        #expect(WorkloadsDisplay.selection(after: c.selected, in: c.pods) == c.want)
+    }
+
+    @Test("a pod's key is its namespace and name")
+    func key() {
+        #expect(testPod("db-0", namespace: "shop").key == "shop/db-0")
     }
 }

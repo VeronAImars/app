@@ -21,7 +21,9 @@ import K3smStatus
 /// WorkloadsModel is the console's state: the last pod and node lists, the
 /// search, the selected pod and its detail, polled serially through the one
 /// CLI seam while the console is on screen, the way StatusPoller polls the
-/// visibility probe.
+/// visibility probe. `PollGate` keeps the list reads serial: a refresh during
+/// a poll runs once more after it, and a start after a stop waits for the
+/// stopped loop to end.
 @MainActor
 final class WorkloadsModel: ObservableObject {
     enum Detail: String, CaseIterable, Identifiable {
@@ -45,6 +47,9 @@ final class WorkloadsModel: ObservableObject {
 
     private let environment: [String: String]
     private var task: Task<Void, Never>?
+    /// The loop `stop()` cancelled, until the next `start()` waits for it.
+    private var stopping: Task<Void, Never>?
+    private var gate = PollGate()
     private var detailTask: Task<Void, Never>?
 
     init(environment: [String: String]) {
@@ -61,9 +66,9 @@ final class WorkloadsModel: ObservableObject {
         return w.pods.first { $0.key == selected }
     }
 
-    /// The pods the search leaves visible, by name or image.
+    /// The pods the search leaves visible, by `WorkloadsDisplay.visible`.
     func visible(_ pods: [Pod]) -> [Pod] {
-        query.isEmpty ? pods : pods.filter { ($0.name + " " + $0.image).localizedCaseInsensitiveContains(query) }
+        WorkloadsDisplay.visible(pods, query: query)
     }
 
     func select(_ pod: Pod) {
@@ -71,26 +76,46 @@ final class WorkloadsModel: ObservableObject {
         loadDetail()
     }
 
-    /// Starts polling while the tab is shown; a second start is a no-op.
+    /// Starts polling while the tab is shown; a second start is a no-op. The
+    /// new loop first waits for a stopped one to end, so two loops never
+    /// overlap.
     func start() {
         guard task == nil else { return }
+        let previous = stopping
+        stopping = nil
         task = Task { [weak self] in
+            await previous?.value
             while !Task.isCancelled {
                 guard let self else { return }
-                await self.pollOnce()
+                await self.poll()
                 try? await Task.sleep(for: PollSchedule.visibleInterval)
             }
         }
     }
 
-    /// Stops polling when the tab leaves the screen.
+    /// Stops polling when the tab leaves the screen. The cancelled run kills
+    /// its CLI child; the next `start()` waits for it.
     func stop() {
-        task?.cancel()
-        task = nil
+        guard let task else { return }
+        task.cancel()
+        stopping = task
+        self.task = nil
     }
 
+    /// Reads the lists now, or, with a poll in flight, once more after it.
     func refresh() async {
-        await pollOnce()
+        await poll()
+    }
+
+    /// One run through the gate, repeated while a refresh asked for another.
+    /// A cancelled run still drains the gate so it is never left held.
+    private func poll() async {
+        guard gate.begin() else { return }
+        repeat {
+            if !Task.isCancelled {
+                await pollOnce()
+            }
+        } while gate.finish()
     }
 
     private func pollOnce() async {
@@ -98,7 +123,7 @@ final class WorkloadsModel: ObservableObject {
             path: K3smCLI.path,
             arguments: K3smCLI.workloadsArguments,
             environment: environment,
-            deadline: PollSchedule.killDeadline,
+            deadline: PollSchedule.listDeadline,
             limit: OutputLimit.list
         )
         guard !Task.isCancelled else { return }
@@ -116,7 +141,7 @@ final class WorkloadsModel: ObservableObject {
             path: K3smCLI.path,
             arguments: K3smCLI.nodesArguments,
             environment: environment,
-            deadline: PollSchedule.killDeadline,
+            deadline: PollSchedule.listDeadline,
             limit: OutputLimit.list
         )
         guard !Task.isCancelled else { return }
@@ -127,10 +152,13 @@ final class WorkloadsModel: ObservableObject {
         }
         load = HostLoad.read()
         readAt = Date()
-        if selected == nil, let first = workloads?.pods.first {
-            selected = first.key
+        switch WorkloadsDisplay.selection(after: selected, in: workloads?.pods) {
+        case .keep:
+            break
+        case .select(let key):
+            selected = key
             loadDetail()
-        } else if selectedPod == nil {
+        case .clear:
             selected = nil
             detailText = ""
         }
@@ -161,17 +189,12 @@ final class WorkloadsModel: ObservableObject {
                 let text = StatusDisplay.body(String(decoding: stdout, as: UTF8.self))
                 self.detailText = status == 0 ? (text.isEmpty ? "Nothing recorded." : text) : "k3sm kubectl exited \(status)"
             case .truncated(let stdout):
-                // The first OutputLimit.detail bytes, as before; the run was
-                // stopped there instead of read to the end.
-                self.detailText = String(decoding: stdout, as: UTF8.self) + "\n… cut at \(OutputLimit.detail >> 10) KiB"
+                // The first OutputLimit.detail bytes, cleaned like a whole
+                // read; the run was stopped there instead of read to the end.
+                self.detailText = StatusDisplay.body(String(decoding: stdout, as: UTF8.self)) + "\n… cut at \(OutputLimit.detail >> 10) KiB"
             case .missing, .failedToLaunch, .killed, .refused:
                 self.detailText = "the k3sm CLI did not answer"
             }
         }
     }
-}
-
-extension Pod {
-    /// The selection key: a pod is unique by namespace and name.
-    var key: String { "\(namespace)/\(name)" }
 }

@@ -22,7 +22,9 @@ import Foundation
 public enum WorkloadsReading: Equatable, Sendable {
     /// The list decoded; it may be empty, which is a cluster with no pods.
     case listed(Workloads)
-    /// The CLI exited non-zero, or its output was not a pod list.
+    /// The CLI exited non-zero, or its output was not a pod list. The text
+    /// carries the list's decoded kind, so it is shown through
+    /// `StatusDisplay.errorText`, which also runs on the kind here.
     case cliError(String)
     /// The CLI is not installed at its absolute path.
     case binaryMissing
@@ -35,11 +37,26 @@ public enum WorkloadsReading: Equatable, Sendable {
         do {
             return .listed(try Workloads.decode(stdout))
         } catch WorkloadsDecodeError.notAPodList(let kind) {
-            return .cliError("kubectl returned a \(kind), not a pod list")
+            return .cliError("kubectl returned a \(StatusDisplay.errorText(kind)), not a pod list")
         } catch {
             return .cliError("the pod list could not be read")
         }
     }
+}
+
+/// SelectionChange is what a poll does to the selected pod.
+public enum SelectionChange: Equatable, Sendable {
+    /// The selected pod is still listed.
+    case keep
+    /// Select the pod with this key and load its detail.
+    case select(String)
+    /// Nothing is selected, and the detail is emptied.
+    case clear
+}
+
+extension Pod {
+    /// The selection key: a pod is unique by namespace and name.
+    public var key: String { "\(namespace)/\(name)" }
 }
 
 /// WorkloadsDisplay turns a pod into the strings the list shows: how it runs,
@@ -54,9 +71,18 @@ public enum WorkloadsDisplay {
         }
     }
 
-    /// Cores as the list shows them: "0.25", "2", or "" when nothing was requested.
+    /// The most cores a figure shows; a larger or infinite value is shown
+    /// as this figure with a "+", and the This Mac sum saturates here.
+    public static let maxCores: Double = 1_000_000
+
+    /// Cores as the list shows them: "0.25", "2", "1000000+" at or past
+    /// `maxCores`, or "" when nothing (or nothing countable: a negative or
+    /// NaN value) was requested. A request is API data: "9223372036854775807"
+    /// is 2^63 as a Double, which `Int(_:)` traps on, so no value outside
+    /// `maxCores` reaches the conversion.
     public static func cores(_ value: Double?) -> String {
-        guard let v = value else { return "" }
+        guard let v = value, v >= 0 else { return "" }
+        if v >= maxCores { return "\(Int(maxCores))+" }
         if v == v.rounded() { return String(Int(v)) }
         return String(format: v < 1 ? "%.2f" : "%.1f", v)
     }
@@ -81,6 +107,27 @@ public enum WorkloadsDisplay {
         case ..<172_800: return "\(Int(seconds / 3600)) h"
         default: return "\(Int(seconds / 86_400)) d"
         }
+    }
+
+    /// The pods the search leaves visible: all of them for an empty query,
+    /// otherwise those whose name or image, each as the list shows it
+    /// (`StatusDisplay.clip`), contains it, case-insensitively. Matching the
+    /// shown text means a pod never matches on a part of its name the list
+    /// hides, and a query never spans the name and the image.
+    public static func visible(_ pods: [Pod], query: String) -> [Pod] {
+        guard !query.isEmpty else { return pods }
+        return pods.filter { pod in
+            [pod.name, pod.image].contains { StatusDisplay.clip($0).localizedCaseInsensitiveContains(query) }
+        }
+    }
+
+    /// What a poll does to the selection. With nothing selected it selects
+    /// the first pod of the list; a selected pod still listed stays; a pod
+    /// gone from the list, or a list that did not read, clears it.
+    public static func selection(after selected: String?, in pods: [Pod]?) -> SelectionChange {
+        if selected == nil, let first = pods?.first { return .select(first.key) }
+        if let selected, pods?.contains(where: { $0.key == selected }) == true { return .keep }
+        return .clear
     }
 
     /// The list's group header: the namespace and its pod count.
