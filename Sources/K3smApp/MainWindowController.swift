@@ -40,13 +40,15 @@ final class MainWindowController: NSObject, NSWindowDelegate {
         NSApp.setActivationPolicy(.regular)
         window.makeKeyAndOrderFront(nil)
         NSApp.activate()
-        // While the app is in the Dock, the Dock icon is drawn here: its own
-        // tile, still, with the mark flapping on it at the wordmark's angle.
-        // A frame that fails to render leaves the last good one in place.
-        dockFlap = model.flap.$angle.removeDuplicates().sink { angle in
+        // While the console is on screen, the Dock icon is drawn here: its
+        // own tile, still, with the mark flapping on it at the wordmark's
+        // angle. The first-run and install screens keep the bundle icon. A
+        // frame that fails to render leaves the last good one in place.
+        dockFlap = model.$screen.combineLatest(model.flap.$angle.removeDuplicates()).sink { screen, angle in
             MainActor.assumeIsolated {
-                let image = DockIcon.image(angle: angle)
-                switch DockFrame.decide(consoleShown: true, rendered: image != nil) {
+                let consoleShown = screen == .status
+                let image = consoleShown ? DockIcon.image(angle: angle) : nil
+                switch DockFrame.decide(consoleShown: consoleShown, rendered: image != nil) {
                 case .bundleIcon: NSApp.applicationIconImage = nil
                 case .newFrame: NSApp.applicationIconImage = image
                 case .keepLast: break
