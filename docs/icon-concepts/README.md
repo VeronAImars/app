@@ -11,6 +11,13 @@ Nothing here changes the shipped icon. To adopt one:
 hack/icon-concepts.sh --pick <concept> Resources/AppIcon.icns
 ```
 
+To check that macOS 26 draws every concept as a tile of its own (and not
+inside its grey tile, as it does for an icon whose content leaves the tile):
+
+```sh
+hack/icon-concepts.sh --check
+```
+
 To re-render this folder after the mark or a concept changes:
 
 ```sh
@@ -25,7 +32,7 @@ hack/icon-concepts.sh docs/icon-concepts
 | `night-glow` | <img src="night-glow.png" width="128" alt="night-glow"> | the console's navy with a blue glow, no gloss | `#8fa4ff` on both wings, glowing `#6f88fe`; the still frame of the Dock flap (#27) |
 | `electric` | <img src="electric.png" width="128" alt="electric"> | brand blue, `#2d48fe` to `#022ffb` to `#011389` | white / `#c9d2ff` |
 | `porcelain` | <img src="porcelain.png" width="128" alt="porcelain"> | white to `#eef1ff` | the brand's `#022ffb` / `#011389` |
-| `breakout` | <img src="breakout.png" width="128" alt="breakout"> | the console's navy | `#8fa4ff` / `#3d5bff`, the mark at 86% so it meets the tile's edges |
+| `bold` | <img src="bold.png" width="128" alt="bold"> | the console's navy | `#8fa4ff` / `#3d5bff`, the mark at 74%, as large as it can be while it and its glow stay inside the tile |
 | `aurora` | <img src="aurora.png" width="128" alt="aurora"> | navy to violet, `#070d3d` to `#5b2bd6` | white / `#9fb2ff`, glowing |
 
 The tile follows Apple's macOS icon grid (an 824-point rounded square on the
