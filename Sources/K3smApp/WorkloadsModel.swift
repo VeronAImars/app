@@ -29,9 +29,6 @@ final class WorkloadsModel: ObservableObject {
         var id: Self { self }
     }
 
-    /// The most detail text the inspector keeps.
-    private static let detailBytes = 64 * 1024
-
     @Published private(set) var reading: WorkloadsReading?
     @Published private(set) var readAt: Date?
     /// The cluster's nodes from the last poll; nil when the read failed or
@@ -101,7 +98,8 @@ final class WorkloadsModel: ObservableObject {
             path: K3smCLI.path,
             arguments: K3smCLI.workloadsArguments,
             environment: environment,
-            deadline: PollSchedule.killDeadline
+            deadline: PollSchedule.killDeadline,
+            limit: OutputLimit.list
         )
         guard !Task.isCancelled else { return }
         switch outcome {
@@ -109,6 +107,8 @@ final class WorkloadsModel: ObservableObject {
             reading = .binaryMissing
         case .failedToLaunch, .killed, .refused:
             reading = .cliError("the k3sm CLI did not answer")
+        case .truncated:
+            reading = .cliError("the pod list is larger than \(OutputLimit.list >> 20) MiB")
         case .exited(let status, let stdout):
             reading = WorkloadsReading.classify(exitCode: status, stdout: stdout)
         }
@@ -116,7 +116,8 @@ final class WorkloadsModel: ObservableObject {
             path: K3smCLI.path,
             arguments: K3smCLI.nodesArguments,
             environment: environment,
-            deadline: PollSchedule.killDeadline
+            deadline: PollSchedule.killDeadline,
+            limit: OutputLimit.list
         )
         guard !Task.isCancelled else { return }
         if case .exited(0, let stdout) = nodesOutcome {
@@ -152,13 +153,17 @@ final class WorkloadsModel: ObservableObject {
         detailLoading = true
         detailTask = Task { [weak self] in
             guard let self else { return }
-            let outcome = await CLIProcess.run(path: K3smCLI.path, arguments: arguments, environment: self.environment, deadline: .seconds(15))
+            let outcome = await CLIProcess.run(path: K3smCLI.path, arguments: arguments, environment: self.environment, deadline: .seconds(15), limit: OutputLimit.detail)
             guard !Task.isCancelled else { return }
             self.detailLoading = false
             switch outcome {
             case .exited(let status, let stdout):
-                let text = StatusDisplay.body(String(decoding: stdout.prefix(Self.detailBytes), as: UTF8.self))
+                let text = StatusDisplay.body(String(decoding: stdout, as: UTF8.self))
                 self.detailText = status == 0 ? (text.isEmpty ? "Nothing recorded." : text) : "k3sm kubectl exited \(status)"
+            case .truncated(let stdout):
+                // The first OutputLimit.detail bytes, as before; the run was
+                // stopped there instead of read to the end.
+                self.detailText = String(decoding: stdout, as: UTF8.self) + "\n… cut at \(OutputLimit.detail >> 10) KiB"
             case .missing, .failedToLaunch, .killed, .refused:
                 self.detailText = "the k3sm CLI did not answer"
             }

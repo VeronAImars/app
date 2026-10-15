@@ -15,6 +15,7 @@ limitations under the License.
 */
 
 import Foundation
+import K3smStatus
 import Synchronization
 
 /// CLIOutcome is what one run of the k3sm CLI produced.
@@ -27,31 +28,43 @@ enum CLIOutcome: Sendable {
     case killed
     /// The CLI exited on its own.
     case exited(status: Int32, stdout: Data)
+    /// The CLI wrote more than the run's limit: it was killed, and `stdout`
+    /// holds the first `limit` bytes.
+    case truncated(stdout: Data)
     /// The CLI failed its trust check just before the run, so it was not run.
     case refused(String)
 }
 
 /// CLIProcess runs the k3sm CLI by absolute path with the environment the
-/// caller built, collects its standard output, and kills it at the deadline.
-/// It runs on a background thread; callers await the outcome.
+/// caller built, collects at most `limit` bytes of its standard output, and
+/// kills it at the deadline, when its output passes the limit, or when the
+/// task awaiting it is cancelled. It runs on a background thread; callers
+/// await the outcome.
 enum CLIProcess {
     /// How long to wait for the output pipe to close after the process exits.
     /// A grandchild that inherited the pipe can hold it open; the run does not
     /// wait on it past this.
     private static let drainGrace: DispatchTimeInterval = .milliseconds(500)
 
-    static func run(path: String, arguments: [String], environment: [String: String], deadline: Duration) async -> CLIOutcome {
+    static func run(path: String, arguments: [String], environment: [String: String], deadline: Duration, limit: Int) async -> CLIOutcome {
         guard FileManager.default.isExecutableFile(atPath: path) else {
             return .missing
         }
-        return await withCheckedContinuation { continuation in
-            DispatchQueue.global(qos: .utility).async {
-                continuation.resume(returning: runBlocking(path: path, arguments: arguments, environment: environment, deadline: deadline))
+        let control = RunControl()
+        return await withTaskCancellationHandler {
+            await withCheckedContinuation { continuation in
+                DispatchQueue.global(qos: .utility).async {
+                    continuation.resume(returning: runBlocking(path: path, arguments: arguments, environment: environment, deadline: deadline, limit: limit, control: control))
+                }
             }
+        } onCancel: {
+            // A cancelled caller drops the result, so the child need not run
+            // on to its deadline: a run of tab clicks ends each earlier run.
+            control.stop()
         }
     }
 
-    private static func runBlocking(path: String, arguments: [String], environment: [String: String], deadline: Duration) -> CLIOutcome {
+    private static func runBlocking(path: String, arguments: [String], environment: [String: String], deadline: Duration, limit: Int, control: RunControl) -> CLIOutcome {
         let process = Process()
         process.executableURL = URL(fileURLWithPath: path)
         process.arguments = arguments
@@ -63,51 +76,109 @@ enum CLIProcess {
         process.standardOutput = pipe
 
         let exited = DispatchSemaphore(value: 0)
-        process.terminationHandler = { _ in exited.signal() }
+        process.terminationHandler = { _ in
+            control.exited()
+            exited.signal()
+        }
         do {
             try process.run()
         } catch {
             return .failedToLaunch
         }
         try? pipe.fileHandleForWriting.close()
+        control.launched(process.processIdentifier)
 
-        let output = OutputBuffer()
+        let output = OutputBuffer(limit: limit)
         let drained = DispatchSemaphore(value: 0)
         let reader = pipe.fileHandleForReading
         Thread.detachNewThread {
             while let chunk = try? reader.read(upToCount: 64 * 1024), !chunk.isEmpty {
-                output.append(chunk)
+                guard output.append(chunk) else {
+                    // Past the limit: stop reading and end the run, so the
+                    // child is not left blocked on a full pipe.
+                    control.stop()
+                    break
+                }
             }
             drained.signal()
         }
 
-        // The pid cannot be reused before the termination handler runs: the
-        // process is not reaped until then, so the kill reaches only this run.
-        let pid = process.processIdentifier
-        var killed = false
         if exited.wait(timeout: .now() + deadline.dispatchInterval) == .timedOut {
-            kill(pid, SIGKILL)
-            killed = true
+            control.stop()
             exited.wait()
         }
         _ = drained.wait(timeout: .now() + drainGrace)
-        if killed {
+        let (data, overflowed) = output.result
+        if overflowed {
+            return .truncated(stdout: data)
+        }
+        if control.wasStopped {
             return .killed
         }
-        return .exited(status: process.terminationStatus, stdout: output.data)
+        return .exited(status: process.terminationStatus, stdout: data)
     }
 }
 
-/// OutputBuffer accumulates a child's output across threads.
+/// OutputBuffer accumulates up to a limit of a child's output across threads.
 private final class OutputBuffer: Sendable {
-    private let storage = Mutex(Data())
+    private let storage: Mutex<CappedOutput>
 
-    func append(_ chunk: Data) {
+    init(limit: Int) {
+        storage = Mutex(CappedOutput(limit: limit))
+    }
+
+    /// append adds `chunk`; false once the output has passed the limit.
+    func append(_ chunk: Data) -> Bool {
         storage.withLock { $0.append(chunk) }
     }
 
-    var data: Data {
-        storage.withLock { $0 }
+    var result: (data: Data, overflowed: Bool) {
+        storage.withLock { ($0.data, $0.overflowed) }
+    }
+}
+
+/// RunControl is the one place a run's child is killed: at the deadline,
+/// past the output limit, or on cancellation, whichever comes first.
+///
+/// Foundation reaps the child and then runs the termination handler, so a
+/// kill sent while `exited` is false can in principle meet a pid released a
+/// moment earlier; macOS allocates pids sequentially, so that window is
+/// negligible. A stop that arrives before the launch is held and applied the
+/// moment the pid is known.
+///
+/// The signal reaches the direct child only. The `k3sm kubectl` wrapper
+/// forks `kubectl` and waits for it, so a killed wrapper leaves that
+/// grandchild running until it next writes to the closed pipe or finishes
+/// on its own; closing that gap is the wrapper's to do.
+private final class RunControl: Sendable {
+    private struct State {
+        var pid: pid_t = 0
+        var exited = false
+        var stopped = false
+    }
+    private let state = Mutex(State())
+
+    func launched(_ pid: pid_t) {
+        state.withLock { s in
+            s.pid = pid
+            if s.stopped && !s.exited { kill(pid, SIGKILL) }
+        }
+    }
+
+    func exited() {
+        state.withLock { $0.exited = true }
+    }
+
+    func stop() {
+        state.withLock { s in
+            guard !s.stopped else { return }
+            s.stopped = true
+            if s.pid > 0 && !s.exited { kill(s.pid, SIGKILL) }
+        }
+    }
+
+    var wasStopped: Bool {
+        state.withLock { $0.stopped }
     }
 }
 

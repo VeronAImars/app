@@ -26,6 +26,7 @@ library imports AppKit, so every decision is unit-tested without a GUI.
 | `Reading`, `VisibilityTracker` | R6, R7 | classifies one CLI run; show after one running read, hide after two misses |
 | `K3smCLI` | R4, R6 | the absolute CLI path, fixed argument lists (status, version, and the kubectl calls behind the console: pod list, node list, logs, events, manifest), the built environment |
 | `PollSchedule` | R6 | 5 s visible, 15 s hidden, 4 s kill deadline; the full report every 30 s while the console is open |
+| `OutputLimit`, `CappedOutput` | R6 | the most standard output one CLI run may produce (1 MiB status, 16 MiB pod and node lists, 64 KiB inspector detail) and the buffer that keeps the first `limit` bytes and records an overflow |
 | `StatusDisplay` | R5 | flattens control characters, clips fields, caps rows; `errorText` removes control and format characters from CLI error text and truncates it |
 | `SemanticVersion`, `PayloadRelation` | A8, A9 | semver precedence; payload newer, same or older than installed |
 | `Workloads`, `Pod`, `PodHealth`, `WorkloadKind` | console | decodes `kubectl get pods -A -o json` (the API's `PodList` or kubectl's `List` of pods) into the rows a workloads view shows: how each pod runs, its health word and severity, owner, ports, requests, the node it is bound to |
@@ -67,7 +68,7 @@ library imports AppKit, so every decision is unit-tested without a GUI.
 | file | serves | what it does |
 |---|---|---|
 | `AppDelegate` | A15 | wiring; login-item launch shows only the status item; reopen shows the window; activity assertion against App Nap; pauses polling off the active console session |
-| `StatusPoller`, `CLIProcess` | R6 | serial probe runs with a SIGKILL deadline and a scrubbed environment |
+| `StatusPoller`, `CLIProcess` | R6 | serial probe runs with a scrubbed environment; the child is killed (SIGKILL) at the deadline, once its output passes the run's `OutputLimit` (`.truncated`, the first bytes kept), or when the awaiting task is cancelled; the signal reaches the direct child only, so a `kubectl` the wrapper forked may outlive it |
 | `StatusItemController` | R7, L6 | inserts and removes the `NSStatusItem`; logs `status item: visible` only when on screen; respects a user removal; the menu: the Cluster and This Mac status lines (`MenuStatus`, a coloured circle and the word; read from the full report on open, This Mac also from each probe), then Stop and Restart (shown only when lifecycle support is available, never disabled-but-visible), Open Status, Open Logs, Write a Bug Report, Open k3sm, Quit; the icon carries the LAN dot, following each daemons probe |
 | `FlapModel` | | plays a `Flap` beat after each rest while the console is up (started and stopped by the window controller with the console's polls); skips the beat under Reduce Motion; `FlappingButterfly` in `MacPanel` turns each half of the mark about the centre line by its angle |
 | `MenuActions` | L6 | logs through `NSWorkspace` on fixed paths; the status and bug report `.command` files opened in Terminal; never a shell from the app |

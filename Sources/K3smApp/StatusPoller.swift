@@ -57,13 +57,14 @@ final class StatusPoller {
             path: K3smCLI.path,
             arguments: K3smCLI.probeArguments,
             environment: environment,
-            deadline: PollSchedule.killDeadline
+            deadline: PollSchedule.killDeadline,
+            limit: OutputLimit.status
         )
         guard !Task.isCancelled else { return }
         switch outcome {
         case .missing:
             onReading(.binaryMissing, nil)
-        case .failedToLaunch, .killed, .refused:
+        case .failedToLaunch, .killed, .refused, .truncated:
             onReading(.cliError, nil)
         case .exited(let status, let stdout):
             onReading(Reading.classify(exitCode: status, stdout: stdout), try? StatusReport.decode(stdout))
