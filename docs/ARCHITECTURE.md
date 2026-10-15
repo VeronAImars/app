@@ -23,6 +23,7 @@ library imports AppKit, so every decision is unit-tested without a GUI.
 | `StoppedBy` | R1 | the additive `stoppedBy` object (who stopped k3sm, why, when, which phase); a missing or malformed value decodes as nil and never fails the report |
 | `NodeRole` | R4 | the closed two-case table from role to daemon label |
 | `Flap` | | the wordmark butterfly's wing beat: the hinge angle at each frame of one beat (two strokes toward the viewer, the second lower, ending flat) and the random rest between beats |
+| `DockFrame` | | what the Dock shows for each frame: the bundle icon outside the console, a newly rendered frame, or the last frame when a render failed |
 | `Reading`, `VisibilityTracker` | R6, R7 | classifies one CLI run; show after one running read, hide after two misses |
 | `K3smCLI` | R4, R6 | the absolute CLI path, fixed argument lists (status, version, and the kubectl calls behind the console: pod list, node list, logs, events, manifest), the built environment |
 | `PollSchedule`, `PollGate` | R6 | 5 s visible, 15 s hidden, 4 s kill deadline; a 10 s deadline for the console's pod and node lists; the full report every 30 s while the console is open; `PollGate` keeps one run in flight and coalesces the runs asked for meanwhile into one more |
