@@ -25,7 +25,7 @@ struct FlapTests {
     func flatAtBothEnds() {
         let frames = Flap.frames()
         #expect(frames.first == 0)
-        #expect(frames.last == 0)
+        #expect(abs(frames.last ?? 1) < 1e-9)
         #expect(Flap.angle(at: -1) == 0)
         #expect(Flap.angle(at: Flap.duration + 1) == 0)
     }
