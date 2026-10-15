@@ -26,6 +26,7 @@ final class MainWindowController: NSObject, NSWindowDelegate {
     private let model: AppModel
     private var window: NSWindow?
     private var chrome: AnyCancellable?
+    private var dockFlap: AnyCancellable?
 
     init(model: AppModel) {
         self.model = model
@@ -38,6 +39,11 @@ final class MainWindowController: NSObject, NSWindowDelegate {
         NSApp.setActivationPolicy(.regular)
         window.makeKeyAndOrderFront(nil)
         NSApp.activate()
+        // While the app is in the Dock, the Dock icon is drawn here: its own
+        // tile, still, with the mark flapping on it at the wordmark's angle.
+        dockFlap = model.flap.$angle.removeDuplicates().sink { angle in
+            MainActor.assumeIsolated { NSApp.applicationIconImage = DockIcon.image(angle: angle) }
+        }
         if model.screen == .status {
             model.workloads.start()
             model.startReportPolling()
@@ -53,6 +59,8 @@ final class MainWindowController: NSObject, NSWindowDelegate {
         model.workloads.stop()
         model.stopReportPolling()
         model.flap.stop()
+        dockFlap = nil
+        NSApp.applicationIconImage = nil
         NSApp.setActivationPolicy(.accessory)
     }
 

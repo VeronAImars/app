@@ -388,6 +388,7 @@ struct PanelTabStyle: ButtonStyle {
 /// At 0 it draws exactly the flat mark.
 struct FlappingButterfly: View {
     let angle: Double
+    var color: Color = .white
 
     var body: some View {
         ZStack {
@@ -400,7 +401,7 @@ struct FlappingButterfly: View {
     /// wing is the half of the mark on the left (`left`) or right of the
     /// centre line.
     private func wing(left: Bool) -> some View {
-        Butterfly().fill(.white).mask {
+        Butterfly().fill(color).mask {
             HStack(spacing: 0) {
                 Rectangle().opacity(left ? 1 : 0)
                 Rectangle().opacity(left ? 0 : 1)
