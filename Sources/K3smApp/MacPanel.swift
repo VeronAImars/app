@@ -22,7 +22,6 @@ import SwiftUI
 struct MacPanel: View {
     @ObservedObject var workloads: WorkloadsModel
     let report: StatusReport?
-    @State private var load = HostLoad.read()
 
     private static let machine = HostFacts.read()
     /// The status rows the panel lists, in the report's order.
@@ -47,12 +46,12 @@ struct MacPanel: View {
                 CoreGrid(cores: Self.machine.cores, performance: Self.machine.performanceCores, used: coresRequested)
                 Footnote("Squares are performance cores, circles are efficiency cores. Requests, not use.")
             }
-            PanelBlock("Unified memory", value: "\(WorkloadsDisplay.bytes(load.memoryUsedBytes)) of \(WorkloadsDisplay.bytes(Self.machine.memoryBytes))") {
-                Meter(parts: [(Double(memoryRequested), Palette.fill), (Double(max(0, load.memoryUsedBytes - memoryRequested)), Palette.fillDim)], total: Double(Self.machine.memoryBytes))
-                Legend(rows: [("Requested by pods", Palette.fill, WorkloadsDisplay.bytes(memoryRequested)), ("macOS and apps", Palette.fillDim, WorkloadsDisplay.bytes(load.memoryUsedBytes))])
+            PanelBlock("Unified memory", value: "\(WorkloadsDisplay.bytes(workloads.load.memoryUsedBytes)) of \(WorkloadsDisplay.bytes(Self.machine.memoryBytes))") {
+                Meter(parts: [(Double(memoryRequested), Palette.fill), (Double(max(0, workloads.load.memoryUsedBytes - memoryRequested)), Palette.fillDim)], total: Double(Self.machine.memoryBytes))
+                Legend(rows: [("Requested by pods", Palette.fill, WorkloadsDisplay.bytes(memoryRequested)), ("macOS and apps", Palette.fillDim, WorkloadsDisplay.bytes(workloads.load.memoryUsedBytes))])
             }
-            PanelBlock("Data root", value: "\(WorkloadsDisplay.bytes(load.dataRootUsedBytes)) of \(WorkloadsDisplay.bytes(load.dataRootSizeBytes))") {
-                Meter(parts: [(Double(load.dataRootUsedBytes), Palette.fill)], total: Double(load.dataRootSizeBytes))
+            PanelBlock("Data root", value: "\(WorkloadsDisplay.bytes(workloads.load.dataRootUsedBytes)) of \(WorkloadsDisplay.bytes(workloads.load.dataRootSizeBytes))") {
+                Meter(parts: [(Double(workloads.load.dataRootUsedBytes), Palette.fill)], total: Double(workloads.load.dataRootSizeBytes))
                 Footnote("\(HostFacts.dataRoot), the volume it sits on")
             }
             Spacer()
@@ -62,7 +61,6 @@ struct MacPanel: View {
         .padding([.horizontal, .bottom], 20)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         .background(Palette.deep)
-        .onReceive(workloads.$readAt) { _ in load = HostLoad.read() }
     }
 
     private var pods: [Pod] { workloads.workloads?.pods ?? [] }

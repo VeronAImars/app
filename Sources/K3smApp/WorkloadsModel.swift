@@ -39,6 +39,9 @@ final class WorkloadsModel: ObservableObject {
     @Published var detail: Detail = .logs
     @Published private(set) var detailText = ""
     @Published private(set) var detailLoading = false
+    /// The host's memory and data-root use, read with every poll so the panel
+    /// holds no view state (the Command Line Tools have no SwiftUI macro plugin).
+    @Published private(set) var load = HostLoad.read()
 
     private let environment: [String: String]
     private var task: Task<Void, Never>?
@@ -106,6 +109,7 @@ final class WorkloadsModel: ObservableObject {
         case .exited(let status, let stdout):
             reading = WorkloadsReading.classify(exitCode: status, stdout: stdout)
         }
+        load = HostLoad.read()
         readAt = Date()
         if selected == nil, let first = workloads?.pods.first {
             selected = first.key
