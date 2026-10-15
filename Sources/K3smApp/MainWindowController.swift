@@ -56,10 +56,12 @@ final class MainWindowController: NSObject, NSWindowDelegate {
     /// window is on screen: stop both here, not only from the view's
     /// onDisappear, which an ordered-out window may never deliver.
     func windowWillClose(_ notification: Notification) {
+        // The Dock subscription goes first, so stopping the flap does not
+        // render one last frame that is thrown away a line later.
+        dockFlap = nil
         model.workloads.stop()
         model.stopReportPolling()
         model.flap.stop()
-        dockFlap = nil
         NSApp.applicationIconImage = nil
         NSApp.setActivationPolicy(.accessory)
     }
