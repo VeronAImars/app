@@ -73,11 +73,18 @@ turned off.
   the next launch.
 - The **window** opens whenever you open the app from `/Applications`,
   Spotlight or the Dock, even when k3sm is stopped, so there is always a way
-  back in. A launch at login shows only the status item. Its left panel lists
-  the cluster's nodes with their roles and k3sm versions: on the control-plane
-  Mac every node, on a worker this Mac and the server it joined. While the
-  window is open the status report is re-read every 30 seconds, so the list
-  follows nodes as they join and leave.
+  back in. A launch at login shows only the status item. The left panel is
+  headed by what this Mac is part of ("This Mac is the cluster", "A cluster of
+  3 Macs", or "Joined a cluster" on a worker). When the cluster has more than
+  one node, a switch at the top of the panel picks between two views:
+  **Cluster** shows nodes ready, running pods, the cores and memory pods
+  request of what the nodes offer, and each node with its role, readiness,
+  k3sm version and its own requests; **This Mac** shows this Mac's cores,
+  memory and data root and the cluster's nodes with their roles and k3sm
+  versions. The app remembers the choice; a single-node cluster always shows
+  This Mac. The panel scrolls in a short window. While the window is open the
+  pod and node lists are re-read every 5 seconds and the status report is
+  re-read every 30 seconds, so the panel follows nodes as they join and leave.
 
 The app reads state only from `k3sm status -o json`, the machine interface the
 k3sm CLI documents. It runs `/Library/k3sm/k3sm` by absolute path with an
@@ -87,10 +94,9 @@ rest.
 
 ## The menu
 
-The status item's menu shows the verdict and summary, then the status rows,
-each one short line with the name and state only (the full report is read
-each time the menu opens; the report with every detail is in the window), and
-these actions:
+The status item's menu shows the verdict line and one line of cluster stats
+(nodes ready and the pod counts, read from the full report each time the menu
+opens). The full report is in the window. Then come these actions:
 
 - **Stop k3sm** stops k3sm on this Mac completely, pods included, and keeps it
   stopped across restarts until you start it (`sudo k3sm stop`). Before it
