@@ -20,7 +20,7 @@
 # hack/make-icon.sh builds the current icon, so adopting a concept is
 #   hack/icon-concepts.sh --pick <concept> Resources/AppIcon.icns
 # and nothing changes until someone runs it. Concepts: night, night-glow,
-# electric, porcelain, breakout, aurora.
+# electric, porcelain, bold, aurora.
 #
 # The third form asks macOS how it draws each concept. It builds every
 # concept's .icns into a throwaway app bundle, reads the icon back from
@@ -187,9 +187,13 @@ let concepts: [Concept] = [
         drawMark(mark(upper: "#022ffb", lower: "#011389"), glow: shadow(rgb(0x022ffb, 0.35), blur: 30))
         gloss()
     },
-    Concept(name: "breakout", title: "Breakout: the mark fills the navy tile") {
-        drawTile { NSGradient(colors: navy)!.draw(in: tile, angle: -90) }
-        drawMark(mark(upper: "#8fa4ff", lower: "#3d5bff"), scale: 0.86, dy: 30, glow: shadow(rgb(0x6f88fe, 0.8), blur: 30))
+    Concept(name: "bold", title: "Bold: the mark fills the navy tile") {
+        // The mark and its glow stay inside the tile: macOS 26 shrinks an
+        // icon whose content leaves the tile into its grey tile.
+        drawTile {
+            NSGradient(colors: navy)!.draw(in: tile, angle: -90)
+            drawMark(mark(upper: "#8fa4ff", lower: "#3d5bff"), scale: 0.74, glow: shadow(rgb(0x6f88fe, 0.8), blur: 30))
+        }
     },
     Concept(name: "aurora", title: "Aurora: navy to violet, glowing mark") {
         drawTile { NSGradient(colors: [rgb(0x070d3d), rgb(0x2a1a7a), rgb(0x5b2bd6)])!.draw(in: tile, angle: 70) }
