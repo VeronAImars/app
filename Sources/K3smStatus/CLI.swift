@@ -87,17 +87,40 @@ public enum PollSchedule {
 
 /// StatusDisplay limits how much status text the app renders. Every string
 /// from the CLI is data: it is shown verbatim, with control characters
-/// replaced, clipped to a fixed length, and capped to a fixed row count.
+/// replaced and format characters removed, clipped to a fixed length, and
+/// capped to a fixed row count.
 public enum StatusDisplay {
     public static let maxRows = 24
     public static let maxLength = 160
 
-    /// Returns the text safe to show on one line: control characters become
-    /// spaces and anything past `maxLength` characters becomes an ellipsis.
+    /// Returns the text safe to show on one line: a character holding a
+    /// control or line-separator character becomes a space, format
+    /// characters (bidirectional overrides and isolates, zero-width
+    /// characters) are removed, and anything past `maxLength` characters
+    /// becomes an ellipsis. A workload author controls image names, owners
+    /// and kubelet reasons, so none of them may reorder or hide what is
+    /// shown around them.
     public static func clip(_ text: String) -> String {
-        let flat = String(text.map { $0.unicodeScalars.contains(where: { $0.properties.generalCategory == .control }) ? " " : $0 })
+        var flat = ""
+        for character in text {
+            let scalars = character.unicodeScalars
+            if scalars.contains(where: { breaksLine($0) }) {
+                flat.append(" ")
+                continue
+            }
+            var kept = String.UnicodeScalarView()
+            kept.append(contentsOf: scalars.filter { $0.properties.generalCategory != .format })
+            flat.append(contentsOf: String(kept))
+        }
         guard flat.count > maxLength else { return flat }
         return String(flat.prefix(maxLength - 1)) + "…"
+    }
+
+    /// breaksLine is whether `scalar` would break or rewrite a single line:
+    /// a control character or a line or paragraph separator.
+    private static func breaksLine(_ scalar: Unicode.Scalar) -> Bool {
+        let category = scalar.properties.generalCategory
+        return category == .control || category == .lineSeparator || category == .paragraphSeparator
     }
 
     /// The most characters of a CLI error message the app shows.

@@ -94,6 +94,11 @@ struct CLITests {
         ClipCase(name: "markdown stays literal", input: "[click](https://example.com) **bold**", want: "[click](https://example.com) **bold**"),
         ClipCase(name: "exact limit kept", input: String(repeating: "x", count: 160), want: String(repeating: "x", count: 160)),
         ClipCase(name: "over limit clipped", input: String(repeating: "x", count: 161), want: String(repeating: "x", count: 159) + "…"),
+        ClipCase(name: "right-to-left override removed", input: "nginx\u{202E}gnp.exe", want: "nginxgnp.exe"),
+        ClipCase(name: "bidi isolates removed", input: "a\u{2066}b\u{2067}c\u{2068}d\u{2069}e", want: "abcde"),
+        ClipCase(name: "zero-width characters removed", input: "re\u{200B}gis\u{200D}try\u{FEFF}", want: "registry"),
+        ClipCase(name: "line separator flattened", input: "a\u{2028}b\u{2029}c", want: "a b c"),
+        ClipCase(name: "CRLF is one space", input: "a\r\nb", want: "a b"),
     ]
 
     @Test("clip", arguments: clipCases)
