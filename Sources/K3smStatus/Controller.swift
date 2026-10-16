@@ -87,15 +87,26 @@ public enum Controller {
         return OwnerRef(apiVersion: ref.apiVersion ?? "", kind: ref.kind, name: ref.name)
     }
 
-    /// controller is the `apps/v1` object that runs the pod: the
-    /// ReplicaSet's controller when the pod's owner is a ReplicaSet that has
-    /// one, else the pod's owner. Nil when there is no owner, or when the
-    /// owner or the ReplicaSet's controller is outside `apps/v1`: a custom
-    /// kind is never read or acted on as the built-in one.
-    public static func controller(of owner: OwnerRef?, replicaSetOwner: OwnerRef?) -> OwnerRef? {
-        guard let owner, owner.isAppsV1 else { return nil }
-        guard needsLookup(owner), let replicaSetOwner else { return owner }
-        return replicaSetOwner.isAppsV1 ? replicaSetOwner : nil
+    /// controller is the `apps/v1` object that runs the pod, from the pod's
+    /// owner and, when that owner is a ReplicaSet, the read of it:
+    /// - `.controller`: the ReplicaSet's controller when it has one, the
+    ///   ReplicaSet itself when it has none, or the pod's owner otherwise;
+    /// - `.unread`: the owner is a ReplicaSet whose read failed or has not
+    ///   run, so what controls it is not known and nothing should act on it;
+    /// - `.noController`: no owner, or the owner or the ReplicaSet's
+    ///   controller is outside `apps/v1`. A custom kind is never read or
+    ///   acted on as the built-in one.
+    public static func controller(of owner: OwnerRef?, replicaSet: ReplicaSetRead?) -> ControllerAnswer {
+        guard let owner, owner.isAppsV1 else { return .noController }
+        guard needsLookup(owner) else { return .controller(owner) }
+        switch replicaSet {
+        case nil, .failed?:
+            return .unread(replicaSet: owner)
+        case .read(nil)?:
+            return .controller(owner)
+        case .read(let above?)?:
+            return above.isAppsV1 ? .controller(above) : .noController
+        }
     }
 
     struct ReplicaSetWire: Decodable {
@@ -120,6 +131,23 @@ struct OwnerReferenceWire: Decodable {
     static func controller(in refs: [OwnerReferenceWire]?) -> OwnerReferenceWire? {
         refs?.first { $0.controller == true }
     }
+}
+
+/// ReplicaSetRead is the outcome of reading a pod's ReplicaSet: its
+/// controller (nil when it has none), or a read that failed.
+public enum ReplicaSetRead: Equatable, Sendable {
+    case read(OwnerRef?)
+    case failed
+}
+
+/// ControllerAnswer is what `Controller.controller` found runs a pod.
+public enum ControllerAnswer: Equatable, Sendable {
+    /// The object to act on.
+    case controller(OwnerRef)
+    /// A ReplicaSet whose controller could not be read.
+    case unread(replicaSet: OwnerRef)
+    /// No controller the app acts on.
+    case noController
 }
 
 public enum ControllerDecodeError: Error, Equatable {

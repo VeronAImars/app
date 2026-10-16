@@ -104,10 +104,18 @@ struct ControllerTests {
         #expect(Controller.needsLookup(rs))
         #expect(!Controller.needsLookup(sts))
         #expect(!Controller.needsLookup(nil))
-        #expect(Controller.controller(of: rs, replicaSetOwner: deploy) == deploy)
-        #expect(Controller.controller(of: rs, replicaSetOwner: nil) == rs)
-        #expect(Controller.controller(of: sts, replicaSetOwner: deploy) == sts)
-        #expect(Controller.controller(of: nil, replicaSetOwner: nil) == nil)
+        #expect(Controller.controller(of: rs, replicaSet: .read(deploy)) == .controller(deploy!))
+        #expect(Controller.controller(of: rs, replicaSet: .read(nil)) == .controller(rs!))
+        #expect(Controller.controller(of: sts, replicaSet: .read(deploy)) == .controller(sts!))
+        #expect(Controller.controller(of: nil, replicaSet: nil) == .noController)
+    }
+
+    @Test("a failed ReplicaSet read is told apart from a ReplicaSet with no owner")
+    func unread() {
+        let rs = OwnerRef(apiVersion: "apps/v1", kind: "ReplicaSet", name: "web-5d8f")!
+        #expect(Controller.controller(of: rs, replicaSet: .failed) == .unread(replicaSet: rs))
+        #expect(Controller.controller(of: rs, replicaSet: nil) == .unread(replicaSet: rs))
+        #expect(Controller.controller(of: rs, replicaSet: .read(nil)) == .controller(rs))
     }
 
     /// A pod list holding one pod whose controller is `kind` in `apiVersion`.
@@ -120,7 +128,7 @@ struct ControllerTests {
         let custom = try Workloads.decode(Self.podList(apiVersion: "example.com/v1", kind: "ReplicaSet")).pods[0].ownerRef
         #expect(custom != nil)
         #expect(!Controller.needsLookup(custom))
-        #expect(Controller.controller(of: custom, replicaSetOwner: nil) == nil)
+        #expect(Controller.controller(of: custom, replicaSet: nil) == .noController)
         let builtIn = try Workloads.decode(Self.podList(apiVersion: "apps/v1", kind: "ReplicaSet")).pods[0].ownerRef
         #expect(Controller.needsLookup(builtIn))
     }
@@ -131,7 +139,7 @@ struct ControllerTests {
         let json = #"{"kind":"ReplicaSet","metadata":{"ownerReferences":[{"apiVersion":"example.com/v1","kind":"Deployment","name":"web","controller":true}]}}"#
         let above = try Controller.decodeReplicaSetOwner(Data(json.utf8))
         #expect(above != nil)
-        #expect(Controller.controller(of: rs, replicaSetOwner: above) == nil)
+        #expect(Controller.controller(of: rs, replicaSet: .read(above)) == .noController)
     }
 
     @Test("the ReplicaSet read is a fixed argument list")
