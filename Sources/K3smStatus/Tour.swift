@@ -201,6 +201,16 @@ public enum Tour {
         return CGPoint(x: min(x, r.maxX - 24), y: max(edge, r.minY + 24))
     }
 
+    /// flight is how long the guide takes to fly from one stop to the next.
+    public static let flight: TimeInterval = 0.9
+
+    /// reveal is how long after the guide sets off a stop is lit: when the
+    /// guide lands, so it leads the tour rather than chasing the box. With
+    /// Reduce Motion there is no flight, and the stop is lit at once.
+    public static func reveal(reduceMotion: Bool) -> TimeInterval {
+        reduceMotion ? 0 : flight
+    }
+
     /// guideAngle is the guide's hinge angle while it flies, in degrees: a
     /// steady beat of `period` seconds that never goes past `peak`.
     public static func guideAngle(at t: TimeInterval, period: TimeInterval = 0.6, peak: Double = 55) -> Double {

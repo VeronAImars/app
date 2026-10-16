@@ -68,6 +68,13 @@ struct TourTests {
         #expect(Tour.list(["A", "B", "C"]) == "A, B and C")
     }
 
+    @Test("a stop is lit when the guide lands, at once under Reduce Motion")
+    func reveal() {
+        #expect(Tour.reveal(reduceMotion: false) == Tour.flight)
+        #expect(Tour.flight > 0)
+        #expect(Tour.reveal(reduceMotion: true) == 0)
+    }
+
     @Test("the keyboard", arguments: [
         (UInt16(124), false, Tour.Key?.some(.next)), (125, false, .next), (36, false, .next), (49, false, .next),
         (123, false, .back), (126, false, .back), (53, false, .end),
