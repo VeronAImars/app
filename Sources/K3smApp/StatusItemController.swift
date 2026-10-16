@@ -119,7 +119,7 @@ final class StatusItemController: NSObject, NSMenuDelegate {
         switch health {
         case .ok: color = NSColor(Palette.ok)
         case .degraded: color = NSColor(Palette.warn)
-        case .down: color = .systemRed
+        case .down: color = NSColor(Palette.down)
         case .unknown: color = NSColor(Palette.unknown)
         }
         let image = NSImage(size: NSSize(width: 10, height: 10), flipped: false) { rect in
