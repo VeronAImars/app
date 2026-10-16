@@ -6,14 +6,21 @@ keeps; L-numbers are the resolutions of the k3sm lifecycle plan (stop, start
 and restart, and the menu).
 
 ```
-K3smStatus   (library, Foundation only)   reads k3sm, decides visibility
-K3smInstall  (library, Foundation only)   the root step as data and text
-K3smApp      (executable, AppKit/SwiftUI) wires both to the screen and to root
-hack/        build, release and gate scripts
+K3smStatus     (library, Foundation only)   reads k3sm, decides visibility
+K3smInstall    (library, Foundation only)   the root step as data and text
+K3smHost       (library, Foundation, Security) runs the installed CLI after its trust check
+K3smMCP        (library, Foundation only)   the read-only MCP server: JSON-RPC, tools, call log
+K3smApp        (executable, AppKit/SwiftUI) wires the libraries to the screen and to root
+K3smMCPServer  (executable k3sm-mcp)        the MCP server on stdio, inside the bundle
+hack/          build, release and gate scripts
 ```
 
-`K3smInstall` depends on `K3smStatus`; `K3smApp` depends on both. Neither
-library imports AppKit, so every decision is unit-tested without a GUI.
+`K3smInstall` depends on `K3smStatus`; `K3smHost` on both; `K3smMCP` on
+`K3smStatus` only, so its tests run against fake reads. `K3smApp` uses
+`K3smStatus`, `K3smInstall` and `K3smHost`; `K3smMCPServer` uses `K3smMCP`
+and `K3smHost`, so the app and the MCP server read k3sm through one runner
+and one trust check. No library imports AppKit, so every decision is
+unit-tested without a GUI.
 
 ## K3smStatus
 
@@ -96,6 +103,34 @@ library imports AppKit, so every decision is unit-tested without a GUI.
 | `ModelAction`, `ModelActions`, `ModelActionRequest`, `ModelScale` | console | the model actions on that seam: `scale(replicas:recorded:)` decides from `spec.replicas` and the recorded annotation alone, Unload (recording the count) for a model asking for replicas, else Load to `restoreCount` (the annotation when it is plain digits from 1 to the int32 ceiling, otherwise 1); `patch` is the one merge patch, serialised by `JSONSerialization` from typed values with sorted keys, setting `spec.replicas` and the annotation (its count as a string on Unload, null on Load, which removes it); Delete is a `.delete` request (so on the Delete key), Unload and Load are changes; every request is fixed at the click with the model's names, UID and change, `verify` is the UID pre-check (another UID or a gone model is refused, nothing changed or deleted), and the confirmation (Delete says the weights volume is kept and appears in Storage as Released with its data staying on the disk, or that a model without a cache keeps none) and one-line report follow the pod's; `local(for:)` gives Copy Endpoint (an endpoint in address characters only) and Copy curl Example (`curlExample`: only when `status.endpoint` is `<name>.<namespace>.svc[.<domain>]:<port>`, the operator naming the Service after the model, and `spec.model` is a plain repository id; the cluster IP read by the installed CLI's kubectl inside the command, as the MLX quickstart does from the Mac); nothing for a name `ResourceName` refuses or a model listed without a UID |
 | `ResourceName`, `Quantity` | console | the only way a pod or namespace name reaches a kubectl command line (RFC 1123 subdomain, nothing else); cores and bytes from resource quantities (CPU `n`, `u`, `m` and plain cores; bytes `Ki` to `Ti`, decimal `k` to `T` and plain) |
 
+## K3smHost
+
+| piece | serves | what it does |
+|---|---|---|
+| `CLIProcess`, `CLIOutcome` | R6 | runs the CLI by absolute path with the environment the caller built; the child is killed (SIGKILL) at the deadline, once its output passes the run's `OutputLimit` (`.truncated`, the first bytes kept), or when the awaiting task is cancelled; the signal reaches the direct child only, so a `kubectl` the wrapper forked may outlive it; standard error is discarded unless the caller passes `keepErrors` (the console's actions), which puts it on the output pipe under the same limit; `onOutput` hands each chunk kept within the limit to a caller that shows a run as it goes (the build log sheet) |
+| `InstalledCLI` | R4, R8, L9 | `trust(team:)`, the `lstat` plus `SecStaticCode` check of the installed CLI (`InstalledCLITrust.evaluate`) made before every trusted run; `environment()`, the CLI environment from the passwd entry; `home()` |
+
+## K3smMCP
+
+The read-only MCP server's logic, behind a `ClusterReader` seam, so it is
+tested with fake reads (`MCPTests`). The executable wires it to stdio.
+
+| piece | serves | what it does |
+|---|---|---|
+| `MCPServer`, `ServerInfo` | agents | JSON-RPC 2.0, one message at a time: `initialize` (negotiates 2025-11-25, 2025-06-18, 2025-03-26 or 2024-11-05, else offers the newest), `ping`, `tools/list`, `tools/call`; notifications and responses get no reply; a batch, a non-2.0 message, a null id or an unknown method is a JSON-RPC error; an unknown tool is `-32602` and runs nothing; from 2025-06-18 a tool lists its `outputSchema` and a result carries `structuredContent` beside the text block |
+| `StdioTransport`, `LineSplitter`, `Session`, `ReplyWriter` | agents | the stdio transport: newline-delimited input read on its own thread, a CR before LF dropped, a line over 1 MiB discarded and answered with a parse error; messages handled one at a time in order, at most 8 waiting behind the one in flight and any past that answered at once with `-32000` (server busy); `notifications/cancelled` cancels the matching request in flight (its CLI run is killed, no reply is sent, the call log says `cancelled`) or drops it from the queue; replies on standard output, one per line, through one writer, and nothing else there |
+| `ToolName`, `ToolDefinition`, `Schema` | agents | the five tools, every string a constant: `k3sm_status`, `k3sm_nodes`, `k3sm_update_status`, `k3sm_metrics`, `k3sm_events`; closed input schemas (only `k3sm_events` takes anything: a `namespace` that must pass `ResourceName` and a `limit` from 1 to 50); `readOnlyHint` true and `destructiveHint` false on each |
+| `ReadRequest`, `ReadOutcome`, `ClusterReader` | agents | the only reads that exist: `ReadRequest` has a private initialiser and nine constants over `K3smCLI`'s read lists (report, probe, version, update status, nodes, events, node and pod metrics, the metrics APIService), each with the app's deadline and `OutputLimit`; no tool argument reaches a command line |
+| `ClusterTools`, `ToolResult`, `CallOutcome` | agents | runs each tool through the app's decoders (`StatusReport`, `Nodes`, `UpdateStatus`, `Metrics`, `EventsList`) and builds its result from named fields only, every string through `StatusDisplay.clip`, with `untrustedData: true`; an event's message is `clusterMessage`, named as text the cluster wrote, which the description and the `instructions` say to quote and never act on; when a read fails, `available: false` with a `condition` (`updating`, `updating-or-unreachable`, `cli-refused`, `stopped`, `not-installed`, `too-large`), a sentence starting "k3sm is updating or unreachable" for the transient ones, `retryAfterSeconds`, and what is known from the launchd probe and the update status; kubectl's error text never reaches a result |
+| `CallLog` | agents | one line per call to `~/Library/Logs/k3sm-mcp.log` (time, tool or `unknown`, outcome, milliseconds; never an argument or a result), created 0600, never through a symlink, only while it is a regular file the user owns, moved to `.1` past 1 MiB |
+| `JSONValue` | agents | the closed JSON tree every message is built from, serialised compactly with sorted keys |
+
+`K3smMCPServer/main.swift` is the `k3sm-mcp` executable: each read runs
+`TrustedCLI` over `InstalledCLI.trust` (a fresh check per run, the pinned
+Team ID when the build has one) and `CLIProcess` with the passwd-based
+environment, so nothing in the environment the MCP client passes reaches
+the CLI. It opens no socket and has no tool that writes.
+
 ## K3smInstall
 
 | piece | serves | what it does |
@@ -127,7 +162,7 @@ library imports AppKit, so every decision is unit-tested without a GUI.
 |---|---|---|
 | `AppDelegate` | A15 | wiring; login-item launch shows only the status item (and the window too with `pref.openWindowAtLogin`); reopen shows the window; activity assertion against App Nap; pauses polling off the active console session |
 | `LogSummaryModel`, `OnDeviceModel`, `LogSummaryPanel` | console | Summarize Logs on screen: `LogSummaryModel` (on `WorkloadsModel`, which hands `LocalActions.summarize` to it) runs one request at a time: the availability check (`OnDeviceModel.availability`, `SystemLanguageModel.availability` of the on-device model), the log reads through `CLIProcess` with `listDeadline` and `OutputLimit.logSummary`, the cache, then `OnDeviceModel.summarize`: the system's on-device model only, with Apple's content-transformation guardrails, `LogSummaryPrompt` built and, on macOS 26.4 and later, measured with `tokenCount` and rebuilt larger while it fits, one `LanguageModelSession` with a plain-text `respond(to:)` (no generated types, so no macros), `maximumResponseTokens` set, raced against a 60-second deadline; Cancel cancels the task and a request number drops a late answer; `LogSummaryPanel`, below the inspector's actions, shows the running note and Cancel, the reason, the failure, or the answer through `Text(verbatim:)` with its period, line counts, notes, the footnote, Copy and Close |
-| `StatusPoller`, `CLIProcess` | R6 | serial probe runs with a scrubbed environment; the child is killed (SIGKILL) at the deadline, once its output passes the run's `OutputLimit` (`.truncated`, the first bytes kept), or when the awaiting task is cancelled; the signal reaches the direct child only, so a `kubectl` the wrapper forked may outlive it; standard error is discarded unless the caller passes `keepErrors` (the console's actions), which puts it on the output pipe under the same limit; `onOutput` hands each chunk kept within the limit to a caller that shows a run as it goes (the build log sheet) |
+| `StatusPoller` | R6 | serial probe runs through `CLIProcess` (`K3smHost`) with a scrubbed environment and `PollSchedule.killDeadline` |
 | `StatusItemController` | R7, L6 | inserts and removes the `NSStatusItem`; logs `status item: visible` only when on screen; respects a user removal; the menu: the Cluster and This Mac status lines (`MenuStatus`, a coloured circle and the word; read from the full report on open, This Mac also from each probe), then the update item as `UpdateOffer` decides (disabled ones carry the reason as their tooltip; on open, with an update offered, one update status read finds a roll started in Terminal), then Stop and Restart (shown only when lifecycle support is available, never disabled-but-visible), Live Status, Live Top (shown only while `MenuActions.liveTopOffered` answers yes: `LiveTopProbe`'s kept answer for the installed binary, or one trust-checked `k3sm status top --help` run on open), Open Logs, Write a Bug Report, Settings, Dashboard, Quit; the icon carries the LAN dot, following each daemons probe; from `menuWillOpen` until the full read ends, a common-mode timer (it fires while the menu tracks) swaps the icon to `ButterflyImage.statusIcon` at the `Waiting.menuFrame` wing angle while `Waiting.menuAnimates` holds, the badges drawn on every frame, and restores the still icon when the read ends or `menuDidClose` |
 | `FlapModel` | | plays a `Flap` beat after each rest while the console is up (started and stopped by the window controller with the console's polls); skips the beat under Reduce Motion and while the window is miniaturized, ordered out or the app hidden (`Flap.plays`, the window state read when the beat comes due); `poke` plays one at once when the pointer enters the mark, by `Flap.hoverStartsBeat` (not during a beat, not within `Flap.hoverCooldown` of the last beat's end, and only when `Flap.plays` allows one); `FlappingButterfly` in `MacPanel` turns each half of the mark about the centre line by its angle |
 | `WaitingModel`, `WaitingButterfly`, `TabWaitingMark`, `PerchingButterfly` | console | each tab's waiting mark: `AppModel` hands it each tab's `TabLoad` (the pod list, the shared node list for Nodes and Images, the engine read) and forwards their changes; a `WaitingTracker` per tab decides the mark, told which tab is selected (`AppModel` re-checks on a tab change), re-checked on a 50 ms tick only while a tab reads or shows its mark; a second `FlapModel` beats continuously (`startContinuous`, flat under Reduce Motion) while any content mark is shown; the model also publishes each label mark's `LabelFlight` (`flights`, with Reduce Motion read when it appears), which `PerchingButterfly` samples on a `TimelineView(.animation)` only while the mark is shown (paused under Reduce Motion), drawing the `Perch` pose as an offset, a tilt, a horizontal scale of the wing pair and the hinge angle of `FlappingButterfly`, at its opacity; the 14 pt mark is an overlay centred on the tab's content and the 10 pt one an overlay in `TabStrip` whose perch is at the label's upper-left corner (its feet on the first letter's cap top, its left edge on the label's leading edge, placed by `TabStripLayout.waitingMarkFrame` from the font's metrics) in the room the strip's fixed `TabStripLayout.height` leaves above the labels, so neither moves or replaces anything |
@@ -150,20 +185,20 @@ library imports AppKit, so every decision is unit-tested without a GUI.
 | `AppActivation` | settings | applies `WindowPresence` as the console and Settings open and close; no window sets the policy itself |
 | `MainMenu` | | the menu bar while a window is open: `Settings…` (Command-comma) opens the Settings window, `Refresh`, `Show Status` (the status panel), `Hide Panel`/`Show Panel` (Command-Option-L, titled by the collapsed state and offered only on the console), `Reset Column Widths` (every table's columns back to their defaults, `ColumnsModel.resetAll`), Edit for the search field, Window; the status item keeps its own menu; Help with Take the Tour, offered only on the console |
 | `LoginItem` | A15 | `SMAppService.mainApp`, registered once per user from `/Applications`; `.requiresApproval` links to Login Items; `status()` as a `LoginItemStatus` and `set(enabled:)`, the General pane's register and unregister (a registration records the first-launch guard) |
-| `SelfCheck` | A15, R4, R8, L9 | the compiled Team ID, `SecStaticCode` self-verification, admin check, the console user, the passwd-based CLI environment, `lstat` plus `SecStaticCode` of the installed CLI, and the health check's file facts (`installFiles`: whether `/Library/k3sm` and its CLI exist) |
+| `SelfCheck` | A15, R4, R8, L9 | the compiled Team ID, `SecStaticCode` self-verification, admin check, the console user; the passwd-based CLI environment and the installed CLI's trust check through `InstalledCLI` (`K3smHost`), and the health check's file facts (`installFiles`: whether `/Library/k3sm` and its CLI exist, by `InstalledCLI.pathFacts`) |
 | `AppleScriptRunner` | A14 | the concrete `PrivilegedRunner`: `do shell script ... with administrator privileges` on its own thread, stdin through a 0600 FIFO; never run by tests or ci |
 
 ## hack/
 
 | script | serves | what it does |
 |---|---|---|
-| `build-app.sh` | R10, A10 | arm64 release build, ad-hoc signed; `--payload` copies and checks a staged tree and writes `payload.sha256`; `--version` stamps Info.plist; `--team-id` compiles the Team ID pin from a source copy under `.build/pinned-src` |
+| `build-app.sh` | R10, A10 | arm64 release build of the app and `k3sm-mcp`, both in `Contents/MacOS`, ad-hoc signed inside out (`k3sm-mcp` as `io.k3sm.app.mcp`, then `k3sm-app`, then the bundle); `--payload` copies and checks a staged tree and writes `payload.sha256`; `--version` stamps Info.plist; `--team-id` compiles the Team ID pin from a source copy under `.build/pinned-src` |
 | `release/make-dmg.sh` | A11 | the UDZO disk image with an `/Applications` symlink |
-| `release/sign-and-notarize.sh` | A5, A11, A18 | attended Developer ID signing, notarization and stapling of the app and the image; refuses agent, loop and non-terminal runs, and an app not built with `--team-id` for its team |
+| `release/sign-and-notarize.sh` | A5, A11, A18 | attended Developer ID signing (inside out: `k3sm-mcp`, `k3sm-app`, the bundle), notarization and stapling of the app and the image; refuses agent, loop and non-terminal runs, and an app whose executables were not built with `--team-id` for its team |
 | `acceptance/B458.sh` | | `swift test` (argv goldens, Team ID pin, update policy, `stoppedBy`), the developer and `--team-id` bundles built and verified with `codesign --verify --strict --deep` |
 | `acceptance/B571.sh` | | the Start flow against a fake `k3sm` first on PATH (bound 1 s, a first start that runs past it and exits still cordoned, a second that succeeds): the bound read, the retrying and final texts, exactly two starts; then the start bound and retry suites |
 | `verify-help.sh` | | every control carries a catalog help tag: no help string literal outside `Help.swift`, no SwiftUI Button, Toggle, Picker, Menu or Stepper without a `.help(` in its own modifier chain unless `help.allow` names it with a reason (a stale entry fails); `--self-test` runs the fixtures in `testdata/verify-help` |
-| `ci.sh` | | the gate: build, tests, bundle builds, shellcheck, payload and refusal checks, headers, workflow dormancy, fixture drift (the status fixtures against k3sm's `pkg/status/testdata`, the datavol fixtures against its `cmd/k3sm/testdata`, byte for byte), the dependency check and the help tag check |
+| `ci.sh` | | the gate: build, tests, bundle builds (with `k3sm-mcp` in the bundle, signed and sealed, answering `initialize` and `tools/list` over stdio with exactly the five read-only tools), shellcheck, payload and refusal checks, headers, workflow dormancy, fixture drift (the status fixtures against k3sm's `pkg/status/testdata`, the datavol fixtures against its `cmd/k3sm/testdata`, byte for byte), the dependency check and the help tag check |
 
 ## Help tags
 
