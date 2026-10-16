@@ -75,6 +75,35 @@ struct TourTests {
         #expect(Tour.reveal(reduceMotion: true) == 0)
     }
 
+    @Test("a flight starts and ends exactly, arcs off the straight line, and stays inside")
+    func flight() {
+        let size = CGSize(width: 1180, height: 732)
+        let a = CGPoint(x: 40, y: 680), b = CGPoint(x: 1100, y: 40)
+        #expect(Tour.flightPoint(from: a, to: b, at: 0, in: size) == a)
+        #expect(Tour.flightPoint(from: a, to: b, at: 1, in: size) == b)
+        #expect(Tour.flightPoint(from: a, to: b, at: -1, in: size) == a)
+        #expect(Tour.flightPoint(from: a, to: b, at: 2, in: size) == b)
+        // Halfway, the guide is well off the straight line between the stops.
+        let mid = Tour.flightPoint(from: a, to: b, at: 0.5, in: size)
+        let dx = b.x - a.x, dy = b.y - a.y
+        let off = abs(dy * mid.x - dx * mid.y + b.x * a.y - b.y * a.x) / (dx * dx + dy * dy).squareRoot()
+        #expect(off > 60, "only \(off) off the line")
+        for i in 0...100 {
+            let p = Tour.flightPoint(from: a, to: b, at: Double(i) / 100, in: size)
+            #expect(p.x >= 16 && p.x <= size.width - 16 && p.y >= 16 && p.y <= size.height - 16)
+        }
+        #expect(Tour.flightPoint(from: b, to: b, at: 0.5, in: size) == b)
+    }
+
+    @Test("the guide perches on a full-height stop's top-left corner, outside its content")
+    func perch() {
+        let size = CGSize(width: 1180, height: 732)
+        let inspector = CGRect(x: 852, y: 3, width: 325, height: 726)
+        let p = Tour.landing(by: inspector, in: size)
+        #expect(p.x == inspector.minX)
+        #expect(p.y < inspector.minY + 30)
+    }
+
     @Test("the keyboard", arguments: [
         (UInt16(124), false, Tour.Key?.some(.next)), (125, false, .next), (36, false, .next), (49, false, .next),
         (123, false, .back), (126, false, .back), (53, false, .end),
