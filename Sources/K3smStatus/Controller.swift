@@ -42,8 +42,11 @@ public struct OwnerRef: Equatable, Sendable {
     /// Deployment in its own group; only the group tells them apart.
     public var isAppsV1: Bool { apiVersion == "apps/v1" }
 
-    /// A kind is an upper-case letter then letters and digits, at most 63
-    /// characters, as Kubernetes kind names are.
+    /// The app's own rule for a kind it will show or put on an argument
+    /// list: an upper-case letter then ASCII letters and digits, at most 63
+    /// characters. The API server asks only that a kind be non-empty (a
+    /// custom resource's kind may be any case), so this is stricter on
+    /// purpose; a kind outside it is shown as no owner.
     static func validKind(_ kind: String) -> Bool {
         guard let first = kind.unicodeScalars.first, kind.unicodeScalars.count <= 63,
               ("A"..."Z").contains(first) else { return false }
