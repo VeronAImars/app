@@ -26,8 +26,13 @@ import SwiftUI
 /// preference cannot carry their bounds to one overlay.
 @MainActor
 final class TourModel: ObservableObject {
-    /// The current stop, nil when the tour is not running.
+    /// The stop the guide is at or flying to, nil when the tour is not running.
     @Published private(set) var step: Int?
+    /// The stop whose box and card are shown: the same as `step` once the
+    /// guide has landed there, nil while it flies, so the guide leads.
+    @Published private(set) var lit: Int?
+    /// Counts moves, so a reveal still pending from an earlier stop is dropped.
+    private var move = 0
     /// The stops, built when the tour starts from this Mac's place in its
     /// cluster, so the first one says what the panel's heading says.
     @Published private(set) var steps = Tour.steps(for: .unknown)
@@ -58,6 +63,7 @@ final class TourModel: ObservableObject {
     }
 
     var current: TourStep? { step.map { steps[$0] } }
+    var litStop: TourStep? { lit.map { steps[$0] } }
 
     /// start shows the first stop. The user's layout is saved and the one
     /// every stop can be seen in is applied; ending the tour restores it.
@@ -92,14 +98,27 @@ final class TourModel: ObservableObject {
     private func go(to i: Int) {
         let target = steps[i].target
         if target.inPanel { scrollTarget = target }
+        move += 1
+        let this = move
+        // The box and card go dark while the guide flies to the next stop,
+        // and light when it lands there.
+        lit = nil
         markAway = true
         step = i
         // Measure after the layout change and any scroll have been drawn.
         DispatchQueue.main.async { [weak self] in self?.measure() }
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) { [weak self] in self?.measure() }
+        let delay = Tour.reveal(reduceMotion: NSWorkspace.shared.accessibilityDisplayShouldReduceMotion)
+        DispatchQueue.main.asyncAfter(deadline: .now() + delay) { [weak self] in
+            guard let self, self.move == this, self.step == i else { return }
+            self.measure()
+            self.lit = i
+        }
     }
 
     private func finish() {
+        move += 1
+        lit = nil
         step = nil
         if let keys { NSEvent.removeMonitor(keys) }
         keys = nil
