@@ -94,9 +94,10 @@ struct TourTests {
             #expect(Self.offLine(p, a, b) < 0.01)
             #expect(p.x >= 16 && p.x <= size.width - 16 && p.y >= 16 && p.y <= size.height - 16)
         }
-        // It eases: a tenth of the way through, it has covered less than a tenth of the distance.
+        // It eases: a tenth of the way through, it has covered well under a
+        // tenth of the distance (a linear glide would cover exactly a tenth).
         let early = Tour.flightPoint(from: a, to: b, at: 0.1, in: size)
-        #expect(early.x - a.x < (b.x - a.x) * 0.1)
+        #expect(early.x - a.x < (b.x - a.x) * 0.05)
         #expect(Tour.flightPoint(from: b, to: b, at: 0.5, in: size) == b)
     }
 
@@ -118,6 +119,19 @@ struct TourTests {
         #expect(box.maxY <= size.height - 12, "card bottom \(box.maxY)")
         #expect(pods.contains(box), "card \(box) not inside the stop")
         #expect(box.maxX == pods.maxX - 16)
+    }
+
+    @Test("with no side free, a stop too small to hold the card has it clamped inside", arguments: [
+        // Too small both ways: below and right of the stop, clamped to the window.
+        (CGRect(x: 300, y: 250, width: 350, height: 200), CGPoint(x: 658, y: 444)),
+        // One point narrower than the card and its insets: still clamped.
+        (CGRect(x: 300, y: 100, width: 361, height: 330), CGPoint(x: 658, y: 444)),
+        // Exactly wide enough: the stop holds the card in its lower-right corner.
+        (CGRect(x: 300, y: 100, width: 362, height: 330), CGPoint(x: 316, y: 152)),
+    ])
+    func cardFallback(stop: CGRect, want: CGPoint) {
+        let size = CGSize(width: 1000, height: 718), card = CGSize(width: 330, height: 262)
+        #expect(Tour.card(card, by: stop, in: size) == want)
     }
 
     @Test("the keyboard", arguments: [
