@@ -31,7 +31,7 @@ struct TourOverlay: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     private static let dim = Palette.night.opacity(0.72)
-    private static let card = CGSize(width: 330, height: 180)
+    private static let cardWidth: CGFloat = 330
 
     var body: some View {
         GeometryReader { geo in
@@ -55,7 +55,7 @@ struct TourOverlay: View {
                         .contentShape(Rectangle())
                         .onTapGesture { tour.end() }
                     if let i = tour.lit, let (current, rect) = lit {
-                        let origin = Tour.card(Self.card, by: rect, in: geo.size)
+                        let origin = Tour.card(CGSize(width: Self.cardWidth, height: tour.cardHeight), by: rect, in: geo.size)
                         RoundedRectangle(cornerRadius: 12)
                             .stroke(Palette.glow, lineWidth: 2)
                             .shadow(color: Palette.glow.opacity(0.7), radius: 12)
@@ -75,7 +75,10 @@ struct TourOverlay: View {
                         }
                         .allowsHitTesting(false)
                         TourCard(step: i, total: tour.steps.count, current: current, back: tour.back, next: tour.next)
-                            .frame(width: Self.card.width)
+                            .frame(width: Self.cardWidth)
+                            .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { height in
+                                if abs(height - tour.cardHeight) > 0.5 { tour.cardHeight = height }
+                            }
                             .offset(x: origin.x, y: origin.y)
                             .transition(.opacity)
                     }
