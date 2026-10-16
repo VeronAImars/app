@@ -70,6 +70,9 @@ final class MainWindowController: NSObject, NSWindowDelegate {
         // The Dock subscription goes first, so stopping the flap does not
         // render one last frame that is thrown away a line later.
         dockFlap = nil
+        // A tour still running ends with the window, so the layout it changed
+        // is put back and its key monitor goes.
+        model.tour.end()
         model.stopTabs()
         model.stopReportPolling()
         model.flap.stop()
