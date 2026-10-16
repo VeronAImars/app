@@ -32,7 +32,7 @@ struct ControllerTests {
         ("", "x", false),
     ])
     func validated(kind: String, name: String, valid: Bool) {
-        #expect((OwnerRef(kind: kind, name: name) != nil) == valid)
+        #expect((OwnerRef(apiVersion: "apps/v1", kind: kind, name: name) != nil) == valid)
     }
 
     @Test("pods from a real list keep their owners")
@@ -43,12 +43,20 @@ struct ControllerTests {
         #expect(pods.contains { $0.owner == nil && $0.ownerRef == nil })
     }
 
+    @Test("an owner's API version is validated", arguments: [
+        ("apps/v1", true), ("v1", true), ("example.com/v1beta1", true),
+        ("", false), ("Apps/v1", false), ("a/b/v1", false), ("/v1", false), ("apps/", false), ("apps/v1 ", false),
+    ])
+    func apiVersion(apiVersion: String, valid: Bool) {
+        #expect((OwnerRef(apiVersion: apiVersion, kind: "Deployment", name: "web") != nil) == valid)
+    }
+
     @Test("a pod's owner is its controller reference, not its first reference")
     func podController() throws {
         let pods = try Workloads.decode(try fixture("kubectl_pods_two_owners.json")).pods
         let web = try #require(pods.first { $0.name == "web-5d8f9c7b6-h4k2p" })
         #expect(web.owner == "ReplicaSet web-5d8f9c7b6")
-        #expect(web.ownerRef == OwnerRef(kind: "ReplicaSet", name: "web-5d8f9c7b6"))
+        #expect(web.ownerRef == OwnerRef(apiVersion: "apps/v1", kind: "ReplicaSet", name: "web-5d8f9c7b6"))
         let adopted = try #require(pods.first { $0.name == "adopted-worker" })
         #expect(adopted.owner == nil)
         #expect(adopted.ownerRef == nil)
@@ -57,7 +65,7 @@ struct ControllerTests {
     @Test("a Deployment's ReplicaSet names the Deployment")
     func replicaSetWithDeployment() throws {
         let owner = try Controller.decodeReplicaSetOwner(try fixture("kubectl_replicaset_deployment.json"))
-        #expect(owner == OwnerRef(kind: "Deployment", name: "hello-http"))
+        #expect(owner == OwnerRef(apiVersion: "apps/v1", kind: "Deployment", name: "hello-http"))
     }
 
     @Test("a ReplicaSet with no owner has no controller above it")
@@ -74,9 +82,9 @@ struct ControllerTests {
 
     @Test("the reference marked as the controller wins, and a hostile one is dropped")
     func controllerFlag() throws {
-        let marked = #"{"kind":"ReplicaSet","metadata":{"ownerReferences":[{"kind":"Other","name":"first","controller":false},{"kind":"Deployment","name":"web","controller":true}]}}"#
-        #expect(try Controller.decodeReplicaSetOwner(Data(marked.utf8)) == OwnerRef(kind: "Deployment", name: "web"))
-        let hostile = #"{"kind":"ReplicaSet","metadata":{"ownerReferences":[{"kind":"Deployment","name":"--all","controller":true}]}}"#
+        let marked = #"{"kind":"ReplicaSet","metadata":{"ownerReferences":[{"apiVersion":"v1","kind":"Other","name":"first","controller":false},{"apiVersion":"apps/v1","kind":"Deployment","name":"web","controller":true}]}}"#
+        #expect(try Controller.decodeReplicaSetOwner(Data(marked.utf8)) == OwnerRef(apiVersion: "apps/v1", kind: "Deployment", name: "web"))
+        let hostile = #"{"kind":"ReplicaSet","metadata":{"ownerReferences":[{"apiVersion":"apps/v1","kind":"Deployment","name":"--all","controller":true}]}}"#
         #expect(try Controller.decodeReplicaSetOwner(Data(hostile.utf8)) == nil)
     }
 
@@ -90,9 +98,9 @@ struct ControllerTests {
 
     @Test("the controller is the ReplicaSet's owner when there is one, else the pod's owner")
     func resolve() {
-        let rs = OwnerRef(kind: "ReplicaSet", name: "web-5d8f")
-        let deploy = OwnerRef(kind: "Deployment", name: "web")
-        let sts = OwnerRef(kind: "StatefulSet", name: "db")
+        let rs = OwnerRef(apiVersion: "apps/v1", kind: "ReplicaSet", name: "web-5d8f")
+        let deploy = OwnerRef(apiVersion: "apps/v1", kind: "Deployment", name: "web")
+        let sts = OwnerRef(apiVersion: "apps/v1", kind: "StatefulSet", name: "db")
         #expect(Controller.needsLookup(rs))
         #expect(!Controller.needsLookup(sts))
         #expect(!Controller.needsLookup(nil))
@@ -100,6 +108,30 @@ struct ControllerTests {
         #expect(Controller.controller(of: rs, replicaSetOwner: nil) == rs)
         #expect(Controller.controller(of: sts, replicaSetOwner: deploy) == sts)
         #expect(Controller.controller(of: nil, replicaSetOwner: nil) == nil)
+    }
+
+    /// A pod list holding one pod whose controller is `kind` in `apiVersion`.
+    static func podList(apiVersion: String, kind: String) -> Data {
+        Data(#"{"kind":"PodList","items":[{"metadata":{"name":"p","ownerReferences":[{"apiVersion":"\#(apiVersion)","kind":"\#(kind)","name":"web","controller":true}]},"spec":{"containers":[{"name":"c"}]}}]}"#.utf8)
+    }
+
+    @Test("a ReplicaSet kind outside apps/v1 is not read as the built-in one")
+    func customReplicaSet() throws {
+        let custom = try Workloads.decode(Self.podList(apiVersion: "example.com/v1", kind: "ReplicaSet")).pods[0].ownerRef
+        #expect(custom != nil)
+        #expect(!Controller.needsLookup(custom))
+        #expect(Controller.controller(of: custom, replicaSetOwner: nil) == nil)
+        let builtIn = try Workloads.decode(Self.podList(apiVersion: "apps/v1", kind: "ReplicaSet")).pods[0].ownerRef
+        #expect(Controller.needsLookup(builtIn))
+    }
+
+    @Test("a ReplicaSet controlled by a kind outside apps/v1 has no controller the app acts on")
+    func customDeployment() throws {
+        let rs = try Workloads.decode(Self.podList(apiVersion: "apps/v1", kind: "ReplicaSet")).pods[0].ownerRef
+        let json = #"{"kind":"ReplicaSet","metadata":{"ownerReferences":[{"apiVersion":"example.com/v1","kind":"Deployment","name":"web","controller":true}]}}"#
+        let above = try Controller.decodeReplicaSetOwner(Data(json.utf8))
+        #expect(above != nil)
+        #expect(Controller.controller(of: rs, replicaSetOwner: above) == nil)
     }
 
     @Test("the ReplicaSet read is a fixed argument list")

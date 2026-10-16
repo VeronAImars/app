@@ -328,7 +328,7 @@ extension Pod {
         ports = wire.spec.containers.flatMap { ($0.ports ?? []).map(\.containerPort) }
         let controller = OwnerReferenceWire.controller(in: wire.metadata.ownerReferences)
         owner = controller.map { "\($0.kind) \($0.name)" }
-        ownerRef = controller.flatMap { OwnerRef(kind: $0.kind, name: $0.name) }
+        ownerRef = controller.flatMap { OwnerRef(apiVersion: $0.apiVersion ?? "", kind: $0.kind, name: $0.name) }
         created = wire.metadata.creationTimestamp
         let cpu = wire.spec.containers.compactMap { $0.resources?.requests?["cpu"] }.compactMap(Quantity.cores)
         cpuRequest = cpu.isEmpty ? nil : cpu.reduce(0, +)
