@@ -80,17 +80,21 @@ struct TourOverlay: View {
                             .transition(.opacity)
                     }
                 }
-                if tour.markAway, let home = local(tour.home) {
-                    let at = tour.current.flatMap { rect(for: $0.target) }.map { Tour.landing(by: Tour.highlight($0, in: geo.size), in: geo.size) }
-                        ?? CGPoint(x: home.midX, y: home.midY)
+                if tour.markAway, let home = local(tour.home), let flight = tour.flight {
+                    let size = geo.size
+                    let homePoint = CGPoint(x: home.midX, y: home.midY)
+                    let from = point(of: flight.from, home: homePoint, in: size)
+                    let to = point(of: flight.to, home: homePoint, in: size)
+                    // The guide's place is read from the clock along its flight
+                    // path; under Reduce Motion it is at the end of the flight.
                     TimelineView(.animation(paused: reduceMotion)) { context in
+                        let t = reduceMotion ? 1 : context.date.timeIntervalSince(flight.start) / Tour.flight
                         FlappingButterfly(angle: reduceMotion ? 0 : Tour.guideAngle(at: context.date.timeIntervalSinceReferenceDate), color: .white)
+                            .frame(width: 30, height: 30)
+                            .shadow(color: Palette.glow.opacity(0.9), radius: 6)
+                            .shadow(color: Palette.glow.opacity(0.6), radius: 16)
+                            .position(Tour.flightPoint(from: from, to: to, at: t, in: size))
                     }
-                    .frame(width: 30, height: 30)
-                    .shadow(color: Palette.glow.opacity(0.9), radius: 6)
-                    .shadow(color: Palette.glow.opacity(0.6), radius: 16)
-                    .position(at)
-                    .animation(reduceMotion ? nil : .easeInOut(duration: Tour.flight), value: at)
                     .allowsHitTesting(false)
                 }
             }
@@ -99,6 +103,12 @@ struct TourOverlay: View {
             .onChange(of: geo.size) { tour.measure() }
         }
         .allowsHitTesting(tour.step != nil)
+    }
+
+    /// Where the guide sits for a stop (beside its lit box), or at home on the
+    /// wordmark for nil.
+    private func point(of target: TourTarget?, home: CGPoint, in size: CGSize) -> CGPoint {
+        target.flatMap { rect(for: $0) }.map { Tour.landing(by: Tour.highlight($0, in: size), in: size) } ?? home
     }
 
     /// The stop's frame in the overlay; `Tour.highlight` pads and clamps it.
