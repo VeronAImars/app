@@ -22,6 +22,8 @@ import Foundation
 public enum PodAction: String, Sendable, CaseIterable, Identifiable {
     /// Deletes a pod that has an owner, which recreates it.
     case restart
+    /// Deletes any pod; its owner, when it has one that does, recreates it.
+    case delete
 
     public var id: Self { self }
 
@@ -29,6 +31,7 @@ public enum PodAction: String, Sendable, CaseIterable, Identifiable {
     public var title: String {
         switch self {
         case .restart: return "Restart"
+        case .delete: return "Delete"
         }
     }
 }
@@ -53,10 +56,11 @@ public struct PodActionRequest: Equatable, ConsoleActionRequest {
     public var rowKey: String { podKey }
     public var verb: String { action.rawValue }
     /// Restart deletes the pod only for its owner to recreate it: a change,
-    /// so it is not on the Delete key.
+    /// so it is not on the Delete key. Delete is the key's action.
     public var kind: ActionKind {
         switch action {
         case .restart: return .change
+        case .delete: return .delete
         }
     }
 
@@ -79,8 +83,13 @@ public struct PodActionRequest: Equatable, ConsoleActionRequest {
     /// The CLI arguments the action runs.
     public var arguments: [String] {
         switch action {
-        case .restart: return K3smCLI.deletePodArguments(namespace: namespace, pod: pod)
+        case .restart, .delete: return K3smCLI.deletePodArguments(namespace: namespace, pod: pod)
         }
+    }
+
+    /// Whether the pod's owner is a controller that recreates a deleted pod.
+    public var recreated: Bool {
+        PodActions.ownerKind(owner).map(PodActions.recreatingOwnerKinds.contains) ?? false
     }
 
     /// The question asked before it runs.
@@ -91,6 +100,11 @@ public struct PodActionRequest: Equatable, ConsoleActionRequest {
                 title: "Restart \(StatusDisplay.clip(namespace.value + "/" + pod.value))?",
                 message: "k3sm deletes this pod, and its owner, \(owner ?? "its controller"), recreates it. "
                     + "Its containers stop now; the new pod may have a new name and run on another node.",
+                verbTitle: action.title, cancelTitle: "Cancel", destructive: true)
+        case .delete:
+            return ActionConfirmation(
+                title: "Delete \(StatusDisplay.clip(namespace.value + "/" + pod.value))?",
+                message: "k3sm deletes this pod, and its containers stop now. " + PodActions.afterDelete(owner: owner),
                 verbTitle: action.title, cancelTitle: "Cancel", destructive: true)
         }
     }
@@ -115,16 +129,48 @@ public enum PodActions {
 
     /// The actions offered for a pod, in button order. Restart only for a pod
     /// whose owner recreates it (`recreatingOwnerKinds`), since nothing brings
-    /// back a bare pod; nothing for a pod whose name or namespace
-    /// `ResourceName` refuses.
+    /// back a bare pod; Delete for any pod; nothing for a pod whose name or
+    /// namespace `ResourceName` refuses, or that was listed without a UID.
     public static func available(for pod: Pod) -> [PodAction] {
         PodAction.allCases.filter { request($0, for: pod) != nil }
     }
 
     /// The pod's actions as its context menu, the inspector and the Delete
-    /// key show them: one list, built here once.
+    /// key show them: one list, built here once, with its local actions.
     public static func menu(for pod: Pod) -> ActionMenu {
-        ActionMenu(available(for: pod).compactMap { request($0, for: pod) })
+        ActionMenu(available(for: pod).compactMap { request($0, for: pod) }, local: localActions(for: pod))
+    }
+
+    /// The local actions a pod offers: Copy Name and Copy Namespace/Name for
+    /// any pod whose names `ResourceName` accepts, and Open Shell in
+    /// Terminal for a pod in phase Running whose first container's name it
+    /// accepts too (the container kubectl itself picks when none is named).
+    /// A pod that is not Running has no process to exec into.
+    public static func localActions(for pod: Pod) -> [LocalMenuItem] {
+        guard let namespace = pod.namespaceName, let name = pod.resourceName else { return [] }
+        var items = [
+            LocalMenuItem(id: "copy-name", title: "Copy Name", action: .copy(name.value)),
+            LocalMenuItem(id: "copy-namespace-name", title: "Copy Namespace/Name", action: .copy(namespace.value + "/" + name.value)),
+        ]
+        if pod.phase == "Running", let first = pod.containers.first, let container = ResourceName(first) {
+            items.append(LocalMenuItem(id: "open-shell", title: "Open Shell in Terminal",
+                                       action: .openShell(PodShell(namespace: namespace, pod: name, container: container))))
+        }
+        return items
+    }
+
+    /// What follows a delete, by the pod's owner: a controller that
+    /// recreates its pods (`recreatingOwnerKinds`) brings it back; an owner
+    /// of another kind may not; nothing brings back a pod without one.
+    /// `owner` is `Pod.owner` already clipped.
+    public static func afterDelete(owner: String?) -> String {
+        guard let owner, !owner.isEmpty else {
+            return "Nothing recreates it; this pod is gone for good."
+        }
+        if let kind = ownerKind(owner), recreatingOwnerKinds.contains(kind) {
+            return "Its owner, \(owner), recreates it, maybe under a new name and on another node."
+        }
+        return "Its owner, \(owner), may not recreate it."
     }
 
     /// The request for one action on a pod, or nil when the pod does not
@@ -136,6 +182,8 @@ public enum PodActions {
         case .restart:
             guard let owner, !owner.isEmpty,
                   let kind = ownerKind(pod.owner), recreatingOwnerKinds.contains(kind) else { return nil }
+        case .delete:
+            break
         }
         return PodActionRequest(action: action, namespace: namespace, pod: name, podKey: pod.key, uid: pod.uid, owner: owner)
     }
@@ -171,6 +219,10 @@ public enum PodActions {
             switch request.action {
             case .restart:
                 return .succeeded("\(verb) asked: \(request.owner ?? "its controller") recreates the pod.")
+            case .delete:
+                return .succeeded(request.recreated
+                    ? "\(verb) asked: \(request.owner ?? "its controller") recreates the pod."
+                    : "\(verb) asked: nothing recreates this pod.")
             }
         case .exited(let status, let output):
             let text = StatusDisplay.errorText(String(decoding: output, as: UTF8.self))

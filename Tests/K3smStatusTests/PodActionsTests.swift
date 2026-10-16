@@ -54,10 +54,10 @@ struct PodActionsTests {
         #expect(PodActions.available(for: ns).isEmpty)
     }
 
-    @Test("restart is offered for an owned pod and absent for an unowned one")
+    @Test("restart is offered for an owned pod and absent for an unowned one; delete for both")
     func restartOnlyForOwnedPod() {
-        #expect(PodActions.available(for: ownedPod()) == [.restart])
-        #expect(PodActions.available(for: testPod("bare")).isEmpty)
+        #expect(PodActions.available(for: ownedPod()) == [.restart, .delete])
+        #expect(PodActions.available(for: testPod("bare")) == [.delete])
         #expect(PodActions.request(.restart, for: testPod("bare")) == nil)
     }
 
@@ -84,7 +84,7 @@ struct PodActionsTests {
     @Test("restart is offered only when the owner recreates the pod", arguments: ownerCases)
     func restartOnlyForRecreatingOwners(_ c: OwnerCase) {
         let pod = c.owner.map { ownedPod(owner: $0) } ?? testPod("bare")
-        #expect(PodActions.available(for: pod) == (c.offered ? [.restart] : []))
+        #expect(PodActions.available(for: pod) == (c.offered ? [.restart, .delete] : [.delete]))
         #expect((PodActions.request(.restart, for: pod) != nil) == c.offered)
     }
 
@@ -179,6 +179,101 @@ struct PodActionsTests {
     func report(_ c: ReportCase) throws {
         let request = try #require(PodActions.request(.restart, for: ownedPod()))
         #expect(PodActions.report(request, run: c.run) == c.want)
+    }
+}
+
+@Suite("deleting a pod")
+struct PodDeleteTests {
+    @Test("the delete confirmation says whether the owner recreates the pod")
+    func deleteConfirmationWordingOwnedVersusUnowned() throws {
+        let owned = try #require(PodActions.request(.delete, for: ownedPod())).confirmation
+        #expect(owned.title == "Delete shop/web-1?")
+        #expect(owned.message == "k3sm deletes this pod, and its containers stop now. Its owner, ReplicaSet web-5f6d, recreates it, maybe under a new name and on another node.")
+        #expect(owned.verbTitle == "Delete")
+        #expect(owned.destructive)
+        let bare = try #require(PodActions.request(.delete, for: testPod("bare", namespace: "shop"))).confirmation
+        #expect(bare.title == "Delete shop/bare?")
+        #expect(bare.message == "k3sm deletes this pod, and its containers stop now. Nothing recreates it; this pod is gone for good.")
+        let job = try #require(PodActions.request(.delete, for: ownedPod(owner: "Job migrate"))).confirmation
+        #expect(job.message == "k3sm deletes this pod, and its containers stop now. Its owner, Job migrate, may not recreate it.")
+        // The owner is cluster text: clipped before it reaches the sheet.
+        let hostile = try #require(PodActions.request(.delete, for: ownedPod(owner: "ReplicaSet \u{202E}x\ny"))).confirmation
+        #expect(!hostile.message.contains("\u{202E}") && !hostile.message.contains("\n"))
+    }
+
+    @Test("the delete runs the restart's argument list behind the same UID read, and is the Delete key's")
+    func deleteRequest() throws {
+        let request = try #require(PodActions.request(.delete, for: testPod("bare", namespace: "shop")))
+        #expect(request.arguments == ["kubectl", "delete", "pod", "bare", "-n", "shop", "--wait=false"])
+        #expect(request.precheckArguments == ["kubectl", "get", "pod", "bare", "-n", "shop", "-o", "jsonpath={.metadata.uid}"])
+        #expect(request.kind == .delete)
+        #expect(request.id == "delete:shop/bare")
+        #expect(request.precheck(.exited(status: 0, output: Data("other".utf8)))
+            == .refused("Delete refused: the pod changed since you clicked; nothing was deleted."))
+        #expect(request.precheck(.exited(status: 0, output: Data("shop-bare".utf8))) == nil)
+    }
+
+    @Test("the delete's report says what comes back")
+    func deleteReport() throws {
+        let owned = try #require(PodActions.request(.delete, for: ownedPod()))
+        #expect(owned.report(.exited(status: 0, output: Data())) == .succeeded("Delete asked: ReplicaSet web-5f6d recreates the pod."))
+        let bare = try #require(PodActions.request(.delete, for: testPod("bare")))
+        #expect(bare.report(.exited(status: 0, output: Data())) == .succeeded("Delete asked: nothing recreates this pod."))
+        #expect(bare.report(.exited(status: 1, output: Data("Error from server (Forbidden): no\n".utf8)))
+            == .failed("Delete failed. kubectl said: Error from server (Forbidden): no"))
+    }
+}
+
+@Suite("the pod's local actions")
+struct PodLocalActionsTests {
+    @Test("copy name and copy namespace/name put the checked names on the pasteboard")
+    func copyActions() {
+        let items = PodActions.localActions(for: ownedPod())
+        #expect(items.map(\.title) == ["Copy Name", "Copy Namespace/Name"])
+        #expect(items.map(\.action) == [.copy("web-1"), .copy("shop/web-1")])
+        #expect(PodActions.menu(for: ownedPod()).local == items)
+        #expect(PodActions.localActions(for: ownedPod(name: "--all")).isEmpty)
+        #expect(PodActions.menu(for: ownedPod(name: "--all")).isEmpty)
+    }
+
+    @Test("open shell is offered only for a running pod whose first container's name passes the guard")
+    func openShellOffer() throws {
+        var running = ownedPod()
+        running.containers = ["app", "sidecar"]
+        let shell = try #require(PodActions.localActions(for: running).last)
+        #expect(shell.title == "Open Shell in Terminal")
+        let want = PodShell(namespace: try #require(ResourceName("shop")), pod: try #require(ResourceName("web-1")),
+                            container: try #require(ResourceName("app")))
+        #expect(shell.action == .openShell(want))
+        for phase in ["Pending", "Succeeded", "Failed", "Unknown", ""] {
+            let pod = Pod(name: "web-1", namespace: "shop", uid: "u", image: "", kind: .nativeProcess, phase: phase,
+                          health: .waiting(""), ready: false, restarts: 0, ports: [], owner: nil, created: nil,
+                          cpuRequest: nil, memoryRequest: nil, nodeName: nil, containers: ["app"])
+            #expect(PodActions.localActions(for: pod).count == 2, "phase \(phase)")
+        }
+        var hostile = ownedPod()
+        hostile.containers = ["--privileged"]
+        #expect(PodActions.localActions(for: hostile).count == 2)
+        #expect(PodActions.localActions(for: ownedPod()).count == 2)
+    }
+
+    @Test("a refused CLI's alert cleans the check's text")
+    func refusedAlert() {
+        let alert = PodShell.refusedAlert(why: "owned by\nmallory\u{202E}")
+        #expect(alert.title == "k3sm will not run the installed k3sm")
+        #expect(alert.text == "It failed the app's check: owned by mallory.")
+    }
+
+    @Test("the decoder keeps the container names and the pod's status reason")
+    func decodesContainersAndReason() throws {
+        let json = """
+            {"kind":"PodList","items":[{"metadata":{"name":"web-1","namespace":"shop","uid":"u1"},
+             "spec":{"containers":[{"name":"app","image":"a"},{"name":"log","image":"b"}]},
+             "status":{"phase":"Failed","reason":"Evicted"}}]}
+            """
+        let pod = try #require(try Workloads.decode(Data(json.utf8)).pods.first)
+        #expect(pod.containers == ["app", "log"])
+        #expect(pod.reason == "Evicted")
     }
 }
 
