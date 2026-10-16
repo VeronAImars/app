@@ -35,6 +35,9 @@ final class TourModel: ObservableObject {
     /// (nil) to a stop or home, starting at `start`. The overlay places the
     /// guide along `Tour.flightPoint` from these.
     @Published private(set) var flight: GuideFlight?
+    /// The caption card's height as last drawn: the card is placed by its
+    /// real size, since the copy runs from three lines to five.
+    @Published var cardHeight: CGFloat = 180
     /// Counts moves, so a reveal still pending from an earlier stop is dropped.
     private var move = 0
     /// The stops, built when the tour starts from this Mac's place in its

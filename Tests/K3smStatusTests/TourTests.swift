@@ -75,7 +75,13 @@ struct TourTests {
         #expect(Tour.reveal(reduceMotion: true) == 0)
     }
 
-    @Test("a flight starts and ends exactly, arcs off the straight line, and stays inside")
+    /// How far `p` is from the straight line through `a` and `b`.
+    static func offLine(_ p: CGPoint, _ a: CGPoint, _ b: CGPoint) -> CGFloat {
+        let dx = b.x - a.x, dy = b.y - a.y
+        return abs(dy * p.x - dx * p.y + b.x * a.y - b.y * a.x) / (dx * dx + dy * dy).squareRoot()
+    }
+
+    @Test("a flight is a straight glide that starts and ends exactly and stays inside")
     func flight() {
         let size = CGSize(width: 1180, height: 732)
         let a = CGPoint(x: 40, y: 680), b = CGPoint(x: 1100, y: 40)
@@ -83,15 +89,15 @@ struct TourTests {
         #expect(Tour.flightPoint(from: a, to: b, at: 1, in: size) == b)
         #expect(Tour.flightPoint(from: a, to: b, at: -1, in: size) == a)
         #expect(Tour.flightPoint(from: a, to: b, at: 2, in: size) == b)
-        // Halfway, the guide is well off the straight line between the stops.
-        let mid = Tour.flightPoint(from: a, to: b, at: 0.5, in: size)
-        let dx = b.x - a.x, dy = b.y - a.y
-        let off = abs(dy * mid.x - dx * mid.y + b.x * a.y - b.y * a.x) / (dx * dx + dy * dy).squareRoot()
-        #expect(off > 60, "only \(off) off the line")
         for i in 0...100 {
             let p = Tour.flightPoint(from: a, to: b, at: Double(i) / 100, in: size)
+            #expect(Self.offLine(p, a, b) < 0.01)
             #expect(p.x >= 16 && p.x <= size.width - 16 && p.y >= 16 && p.y <= size.height - 16)
         }
+        // It eases: a tenth of the way through, it has covered well under a
+        // tenth of the distance (a linear glide would cover exactly a tenth).
+        let early = Tour.flightPoint(from: a, to: b, at: 0.1, in: size)
+        #expect(early.x - a.x < (b.x - a.x) * 0.05)
         #expect(Tour.flightPoint(from: b, to: b, at: 0.5, in: size) == b)
     }
 
@@ -102,6 +108,30 @@ struct TourTests {
         let p = Tour.landing(by: inspector, in: size)
         #expect(p.x == inspector.minX)
         #expect(p.y < inspector.minY + 30)
+    }
+
+    @Test("with no side free, a big stop holds the card in its lower-right corner")
+    func cardInside() {
+        let size = CGSize(width: 1000, height: 718), card = CGSize(width: 330, height: 262)
+        let pods = CGRect(x: 4, y: 24, width: 690, height: 690)   // the pod list, with the inspector beside it
+        let p = Tour.card(card, by: pods, in: size)
+        let box = CGRect(origin: p, size: card)
+        #expect(box.maxY <= size.height - 12, "card bottom \(box.maxY)")
+        #expect(pods.contains(box), "card \(box) not inside the stop")
+        #expect(box.maxX == pods.maxX - 16)
+    }
+
+    @Test("with no side free, a stop too small to hold the card has it clamped inside", arguments: [
+        // Too small both ways: below and right of the stop, clamped to the window.
+        (CGRect(x: 300, y: 250, width: 350, height: 200), CGPoint(x: 658, y: 444)),
+        // One point narrower than the card and its insets: still clamped.
+        (CGRect(x: 300, y: 100, width: 361, height: 330), CGPoint(x: 658, y: 444)),
+        // Exactly wide enough: the stop holds the card in its lower-right corner.
+        (CGRect(x: 300, y: 100, width: 362, height: 330), CGPoint(x: 316, y: 152)),
+    ])
+    func cardFallback(stop: CGRect, want: CGPoint) {
+        let size = CGSize(width: 1000, height: 718), card = CGSize(width: 330, height: 262)
+        #expect(Tour.card(card, by: stop, in: size) == want)
     }
 
     @Test("the keyboard", arguments: [

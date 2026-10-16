@@ -170,7 +170,9 @@ public enum Tour {
 
     /// card is the caption card's origin: right of the target, else below,
     /// left, above; the first that fits inside `size` with a margin and does
-    /// not cover the target. When none fits it is clamped inside.
+    /// not cover the target. When none fits, a stop big enough to hold the
+    /// card (the pod list) takes it in its lower-right corner, over its own
+    /// empty space rather than a neighbour; otherwise it is clamped inside.
     public static func card(_ card: CGSize, by r: CGRect, in size: CGSize) -> CGPoint {
         let m: CGFloat = 12, gap: CGFloat = 22
         func clampX(_ x: CGFloat) -> CGFloat { max(m, min(size.width - card.width - m, x)) }
@@ -185,6 +187,10 @@ public enum Tour {
             let box = CGRect(origin: t, size: card)
             if box.minX < m || box.maxX > size.width - m || box.minY < m || box.maxY > size.height - m { continue }
             if !box.intersects(r) { return t }
+        }
+        let inset: CGFloat = 16
+        if r.width >= card.width + 2 * inset, r.height >= card.height + 2 * inset {
+            return CGPoint(x: clampX(r.maxX - card.width - inset), y: clampY(r.maxY - card.height - inset))
         }
         return CGPoint(x: clampX(r.maxX + gap), y: clampY(r.maxY + gap))
     }
@@ -203,26 +209,16 @@ public enum Tour {
     }
 
     /// flightPoint is where the guide is `t` (0 to 1) into a flight from `a`
-    /// to `b`: it eases out and in, rises in an arc rather than going
-    /// straight, and bobs three times as it flaps, the bob fading to nothing
-    /// at take-off and landing. The point stays inside `size`.
+    /// to `b`: a straight glide that eases out of the start and into the
+    /// landing, kept inside `size`.
     public static func flightPoint(from a: CGPoint, to b: CGPoint, at t: Double, in size: CGSize) -> CGPoint {
         let u = min(max(t, 0), 1)
         let s = u * u * (3 - 2 * u)
-        let dx = Double(b.x - a.x), dy = Double(b.y - a.y)
-        let d = (dx * dx + dy * dy).squareRoot()
-        guard d > 0.5 else { return b }
-        // The unit normal to the path that points up the window (y down).
-        var nx = -dy / d, ny = dx / d
-        if ny > 0 { nx = -nx; ny = -ny }
-        let lift = min(0.3 * d, 140)
-        let cx = Double(a.x + b.x) / 2 + nx * lift, cy = Double(a.y + b.y) / 2 + ny * lift
-        let x = (1 - s) * (1 - s) * Double(a.x) + 2 * (1 - s) * s * cx + s * s * Double(b.x)
-        let y = (1 - s) * (1 - s) * Double(a.y) + 2 * (1 - s) * s * cy + s * s * Double(b.y)
-        let bob = 9 * sin(Double.pi * s) * sin(6 * Double.pi * s)
+        let x = Double(a.x) + (Double(b.x) - Double(a.x)) * s
+        let y = Double(a.y) + (Double(b.y) - Double(a.y)) * s
         let margin = 16.0
-        return CGPoint(x: min(max(x + nx * bob, margin), Double(size.width) - margin),
-                       y: min(max(y + ny * bob, margin), Double(size.height) - margin))
+        return CGPoint(x: min(max(x, margin), Double(size.width) - margin),
+                       y: min(max(y, margin), Double(size.height) - margin))
     }
 
     /// flight is how long the guide takes to fly from one stop to the next.
