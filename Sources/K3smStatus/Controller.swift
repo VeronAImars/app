@@ -41,16 +41,6 @@ public struct OwnerRef: Equatable, Sendable {
     }
 }
 
-extension Pod {
-    /// The owner as kind and name, read from `owner` ("Kind name"; a kind
-    /// has no spaces), or nil for a bare pod or an owner that does not
-    /// validate.
-    public var ownerRef: OwnerRef? {
-        guard let owner, let space = owner.firstIndex(of: " ") else { return nil }
-        return OwnerRef(kind: String(owner[..<space]), name: String(owner[owner.index(after: space)...]))
-    }
-}
-
 /// Controller finds the object that runs a pod, the one a user would scale.
 /// A Deployment's pods are owned by a ReplicaSet, and the Deployment owns
 /// that ReplicaSet: scaling the ReplicaSet would be undone by the

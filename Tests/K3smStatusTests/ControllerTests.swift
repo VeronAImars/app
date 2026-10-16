@@ -21,25 +21,18 @@ import Testing
 
 @Suite("a pod's controller")
 struct ControllerTests {
-    /// A running pod with `owner`, as the decoder writes it ("Kind name").
-    static func pod(owner: String?) -> Pod {
-        Pod(name: "p", namespace: "default", uid: "default-p", image: "registry.local/app:1", kind: .nativeProcess,
-            phase: "Running", health: .running, ready: true, restarts: 0, ports: [], owner: owner, created: nil,
-            cpuRequest: nil, memoryRequest: nil, nodeName: nil)
-    }
-
-    @Test("an owner splits into a validated kind and name", arguments: [
-        ("ReplicaSet hello-http-6bcddf6f77", OwnerRef(kind: "ReplicaSet", name: "hello-http-6bcddf6f77")),
-        ("StatefulSet postgres", OwnerRef(kind: "StatefulSet", name: "postgres")),
-        ("Job nightly-backup", OwnerRef(kind: "Job", name: "nightly-backup")),
-        ("replicaSet lower-case-kind", nil),
-        ("ReplicaSet ../etc", nil),
-        ("ReplicaSet -leading-dash", nil),
-        ("Replica\u{202E}Set x", nil),
-        ("NoSpace", nil),
-    ] as [(String, OwnerRef?)])
-    func split(owner: String, want: OwnerRef?) {
-        #expect(Self.pod(owner: owner).ownerRef == want)
+    @Test("an owner's kind and name are validated", arguments: [
+        ("ReplicaSet", "hello-http-6bcddf6f77", true),
+        ("StatefulSet", "postgres", true),
+        ("Job", "nightly-backup", true),
+        ("replicaSet", "lower-case-kind", false),
+        ("ReplicaSet", "../etc", false),
+        ("ReplicaSet", "-leading-dash", false),
+        ("Replica\u{202E}Set", "x", false),
+        ("", "x", false),
+    ])
+    func validated(kind: String, name: String, valid: Bool) {
+        #expect((OwnerRef(kind: kind, name: name) != nil) == valid)
     }
 
     @Test("pods from a real list keep their owners")
@@ -48,6 +41,17 @@ struct ControllerTests {
         let owners = Set(pods.compactMap { $0.ownerRef?.text })
         #expect(owners.contains("ReplicaSet hello-http-6bcddf6f77"))
         #expect(pods.contains { $0.owner == nil && $0.ownerRef == nil })
+    }
+
+    @Test("a pod's owner is its controller reference, not its first reference")
+    func podController() throws {
+        let pods = try Workloads.decode(try fixture("kubectl_pods_two_owners.json")).pods
+        let web = try #require(pods.first { $0.name == "web-5d8f9c7b6-h4k2p" })
+        #expect(web.owner == "ReplicaSet web-5d8f9c7b6")
+        #expect(web.ownerRef == OwnerRef(kind: "ReplicaSet", name: "web-5d8f9c7b6"))
+        let adopted = try #require(pods.first { $0.name == "adopted-worker" })
+        #expect(adopted.owner == nil)
+        #expect(adopted.ownerRef == nil)
     }
 
     @Test("a Deployment's ReplicaSet names the Deployment")
