@@ -1,0 +1,170 @@
+/*
+Copyright The k3sm Authors.
+
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+    http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+*/
+
+import CoreGraphics
+import Foundation
+
+/// TourTarget is what one stop of the guided tour points at.
+public enum TourTarget: String, CaseIterable, Sendable {
+    /// The panel's top: the machine, its state and the tiles.
+    case summary
+    /// The panel's core grid and memory meter.
+    case cores
+    /// The tab strip above the middle column.
+    case tabs
+    /// The pod list.
+    case pods
+    /// The inspector on the right.
+    case inspector
+    /// The info button that opens the status panel.
+    case info
+
+    /// Whether the target is in the console's left panel, which scrolls.
+    public var inPanel: Bool { self == .summary || self == .cores }
+}
+
+/// TourStep is one stop: what it points at and what it says.
+public struct TourStep: Sendable, Equatable {
+    public let target: TourTarget
+    public let title: String
+    public let text: String
+}
+
+/// Tour is the guided tour's content and its pure decisions: the stops in
+/// order, how the keyboard steps through them, the console layout it shows
+/// them in, and where the caption card goes.
+public enum Tour {
+    public static let steps: [TourStep] = [
+        TourStep(target: .summary, title: "This Mac is the cluster",
+                 text: "One Mac runs the whole thing: control plane, scheduler and the workloads, with no Linux virtual machine in the way. What you see on the left is the machine itself."),
+        TourStep(target: .cores, title: "Cores and memory, by pod",
+                 text: "What the pods ask of this Mac, against what it has. Squares are performance cores, circles efficiency cores."),
+        TourStep(target: .tabs, title: "Workloads, images and builds",
+                 text: "Three views of what runs here: the pods, the images the nodes hold, and the build engine."),
+        TourStep(target: .pods, title: "Workloads",
+                 text: "Pods grouped by namespace. \"Process\" is a native macOS process under a default-deny sandbox; \"Linux VM\" is a Linux container in a small virtual machine, used only when a workload needs Linux."),
+        TourStep(target: .inspector, title: "The inspector",
+                 text: "Click a pod for how it runs, what isolates it, and its logs, events and manifest, straight from the API server."),
+        TourStep(target: .info, title: "Start, stop and settings",
+                 text: "k3sm on this Mac: start, stop, connections from other devices, updates and uninstall, behind this button and under Settings in the menu."),
+    ]
+
+    /// Key is what a key does while the tour runs.
+    public enum Key: Equatable, Sendable {
+        case next, back, end
+    }
+
+    /// key maps a key code to a tour action: the right and down arrows,
+    /// Return and Space go forward, the left and up arrows go back, Escape
+    /// ends. Any other key, or one held with Command, Option or Control,
+    /// passes through.
+    public static func key(code: UInt16, commandOptionOrControl: Bool) -> Key? {
+        guard !commandOptionOrControl else { return nil }
+        switch code {
+        case 124, 125, 36, 49: return .next
+        case 123, 126: return .back
+        case 53: return .end
+        default: return nil
+        }
+    }
+
+    /// step applies `key` to the current stop: the stop after or before it,
+    /// or nil when the tour ends (Escape, or forward from the last stop).
+    public static func step(after key: Key, from i: Int) -> Int? {
+        switch key {
+        case .next: return i + 1 < steps.count ? i + 1 : nil
+        case .back: return max(0, i - 1)
+        case .end: return nil
+        }
+    }
+
+    /// Layout is the part of the console's state the tour depends on.
+    public struct Layout: Equatable, Sendable {
+        public var section: ConsoleSection
+        public var panelCollapsed: Bool
+        public var panelMode: PanelMode?
+        public var inspectorShown: Bool
+
+        public init(section: ConsoleSection, panelCollapsed: Bool, panelMode: PanelMode?, inspectorShown: Bool) {
+            self.section = section
+            self.panelCollapsed = panelCollapsed
+            self.panelMode = panelMode
+            self.inspectorShown = inspectorShown
+        }
+    }
+
+    /// shown is the layout every stop can be seen in: the Workloads tab, the
+    /// panel open on This Mac, and the inspector shown. The tour applies it
+    /// while it runs and puts the user's layout back when it ends.
+    public static let shown = Layout(section: .workloads, panelCollapsed: false, panelMode: .thisMac, inspectorShown: true)
+
+    /// local converts a rectangle in window coordinates (origin at the
+    /// bottom left) to the coordinates of a view whose own frame in the
+    /// window is `view` (origin at its top left, y down).
+    public static func local(_ rect: CGRect, in view: CGRect) -> CGRect {
+        CGRect(x: rect.minX - view.minX, y: view.maxY - rect.maxY, width: rect.width, height: rect.height)
+    }
+
+    /// highlight is the lit box around a stop: the stop's frame padded by
+    /// `pad`, kept `margin` inside the view so its glow stays in the window
+    /// when the stop runs to an edge (the tab strip at the top, the pod list
+    /// to the bottom, the inspector on the right).
+    public static func highlight(_ r: CGRect, in size: CGSize, pad: CGFloat = 8, margin: CGFloat = 3) -> CGRect {
+        let bounds = CGRect(origin: .zero, size: size).insetBy(dx: margin, dy: margin)
+        let padded = r.insetBy(dx: -pad, dy: -pad).intersection(bounds)
+        return padded.isNull ? r : padded
+    }
+
+    /// card is the caption card's origin: right of the target, else below,
+    /// left, above; the first that fits inside `size` with a margin and does
+    /// not cover the target. When none fits it is clamped inside.
+    public static func card(_ card: CGSize, by r: CGRect, in size: CGSize) -> CGPoint {
+        let m: CGFloat = 12, gap: CGFloat = 22
+        func clampX(_ x: CGFloat) -> CGFloat { max(m, min(size.width - card.width - m, x)) }
+        func clampY(_ y: CGFloat) -> CGFloat { max(m, min(size.height - card.height - m, y)) }
+        let tries = [
+            CGPoint(x: r.maxX + gap, y: clampY(r.minY)),
+            CGPoint(x: clampX(r.minX), y: r.maxY + gap),
+            CGPoint(x: r.minX - card.width - gap, y: clampY(r.minY)),
+            CGPoint(x: clampX(r.minX), y: r.minY - card.height - gap),
+        ]
+        for t in tries {
+            let box = CGRect(origin: t, size: card)
+            if box.minX < m || box.maxX > size.width - m || box.minY < m || box.maxY > size.height - m { continue }
+            if !box.intersects(r) { return t }
+        }
+        return CGPoint(x: clampX(r.maxX + gap), y: clampY(r.maxY + gap))
+    }
+
+    /// landing is where the guide settles by a stop: above its top-right
+    /// corner; below it when the stop is near the top edge; and inside its
+    /// top-right corner when the stop runs from top to bottom (the pod list,
+    /// the inspector), so the guide never leaves the window.
+    public static func landing(by r: CGRect, in size: CGSize) -> CGPoint {
+        let edge: CGFloat = 20
+        let x = max(edge, min(r.maxX - 6, size.width - edge))
+        if r.minY > 40 { return CGPoint(x: x, y: r.minY - 12) }
+        if r.maxY + 14 <= size.height - edge { return CGPoint(x: x, y: r.maxY + 14) }
+        return CGPoint(x: min(x, r.maxX - 24), y: max(edge, r.minY + 24))
+    }
+
+    /// guideAngle is the guide's hinge angle while it flies, in degrees: a
+    /// steady beat of `period` seconds that never goes past `peak`.
+    public static func guideAngle(at t: TimeInterval, period: TimeInterval = 0.6, peak: Double = 55) -> Double {
+        guard period > 0 else { return 0 }
+        return peak * (1 - cos(2 * Double.pi * t / period)) / 2
+    }
+}
