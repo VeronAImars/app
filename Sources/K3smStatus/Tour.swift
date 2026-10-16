@@ -57,6 +57,19 @@ public enum Tour {
     /// The number of stops, whatever the shape.
     public static let count = 1 + rest.count
 
+    /// tabsStop names every tab in the strip, read from `ConsoleSection`, so
+    /// the stop stays true as tabs are added.
+    static var tabsStop: TourStep {
+        TourStep(target: .tabs, title: "The tabs",
+                 text: "Each tab is one view of the cluster: \(list(ConsoleSection.allCases.map(\.title))). Workloads also shows the cluster's events.")
+    }
+
+    /// list joins words the way a sentence does: "A", "A and B", "A, B and C".
+    static func list(_ words: [String]) -> String {
+        guard words.count > 1 else { return words.first ?? "" }
+        return words.dropLast().joined(separator: ", ") + " and " + words[words.count - 1]
+    }
+
     /// first is the summary stop, true for each shape.
     public static func first(for shape: ClusterShape) -> TourStep {
         switch shape {
@@ -78,8 +91,7 @@ public enum Tour {
     static let rest: [TourStep] = [
         TourStep(target: .cores, title: "Cores and memory, by pod",
                  text: "What the pods ask of this Mac, against what it has. Squares are performance cores, circles efficiency cores."),
-        TourStep(target: .tabs, title: "Workloads, images and builds",
-                 text: "Three views of what runs here: the pods, the images the nodes hold, and the build engine."),
+        tabsStop,
         TourStep(target: .pods, title: "Workloads",
                  text: "Pods grouped by namespace. \"Process\" is a native macOS process under a default-deny sandbox; \"Linux VM\" is a Linux container in a small virtual machine, used only when a workload needs Linux."),
         TourStep(target: .inspector, title: "The inspector",

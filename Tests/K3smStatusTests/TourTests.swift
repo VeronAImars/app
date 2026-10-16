@@ -50,6 +50,24 @@ struct TourTests {
         }
     }
 
+    @Test("the tabs stop names every tab in the strip")
+    func tabsStop() {
+        let stop = Tour.steps(for: .single).first { $0.target == .tabs }
+        #expect(stop != nil)
+        for section in ConsoleSection.allCases {
+            #expect(stop?.text.contains(section.title) == true, "\(section.title) is missing")
+        }
+        #expect(stop?.text.contains("Workloads, Images, Builds, Services, Storage and Models") == true)
+    }
+
+    @Test("a list reads like a sentence")
+    func list() {
+        #expect(Tour.list([]) == "")
+        #expect(Tour.list(["A"]) == "A")
+        #expect(Tour.list(["A", "B"]) == "A and B")
+        #expect(Tour.list(["A", "B", "C"]) == "A, B and C")
+    }
+
     @Test("the keyboard", arguments: [
         (UInt16(124), false, Tour.Key?.some(.next)), (125, false, .next), (36, false, .next), (49, false, .next),
         (123, false, .back), (126, false, .back), (53, false, .end),
