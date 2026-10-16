@@ -26,6 +26,9 @@ import SwiftUI
 /// the tour runs.
 struct TourOverlay: View {
     @ObservedObject var tour: TourModel
+    /// With Reduce Motion on, the guide holds its wings flat and moves
+    /// without flying, and the lit box does not pulse.
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     private static let dim = Palette.night.opacity(0.72)
     private static let card = CGSize(width: 330, height: 180)
@@ -54,8 +57,8 @@ struct TourOverlay: View {
                         .frame(width: rect.width, height: rect.height)
                         .position(x: rect.midX, y: rect.midY)
                         .allowsHitTesting(false)
-                    TimelineView(.animation) { context in
-                        let phase = context.date.timeIntervalSinceReferenceDate.truncatingRemainder(dividingBy: 1.1) / 1.1
+                    TimelineView(.animation(paused: reduceMotion)) { context in
+                        let phase = reduceMotion ? 1 : context.date.timeIntervalSinceReferenceDate.truncatingRemainder(dividingBy: 1.1) / 1.1
                         // The pulse grows from the box toward its padded ring, but
                         // never past the window's edge.
                         let ring = Tour.highlight(rect, in: geo.size, pad: 10 * phase, margin: 1)
@@ -74,18 +77,18 @@ struct TourOverlay: View {
                 if tour.markAway, let home = local(tour.home) {
                     let at = tour.current.flatMap { rect(for: $0.target) }.map { Tour.landing(by: Tour.highlight($0, in: geo.size), in: geo.size) }
                         ?? CGPoint(x: home.midX, y: home.midY)
-                    TimelineView(.animation) { context in
-                        FlappingButterfly(angle: Tour.guideAngle(at: context.date.timeIntervalSinceReferenceDate), color: .white)
+                    TimelineView(.animation(paused: reduceMotion)) { context in
+                        FlappingButterfly(angle: reduceMotion ? 0 : Tour.guideAngle(at: context.date.timeIntervalSinceReferenceDate), color: .white)
                     }
                     .frame(width: 30, height: 30)
                     .shadow(color: Palette.glow.opacity(0.9), radius: 6)
                     .shadow(color: Palette.glow.opacity(0.6), radius: 16)
                     .position(at)
-                    .animation(.easeInOut(duration: 0.9), value: at)
+                    .animation(reduceMotion ? nil : .easeInOut(duration: 0.9), value: at)
                     .allowsHitTesting(false)
                 }
             }
-            .animation(.spring(duration: 0.55, bounce: 0.15), value: tour.step)
+            .animation(reduceMotion ? nil : .spring(duration: 0.55, bounce: 0.15), value: tour.step)
             .background(TourReporter(tour: tour, role: .overlay))
             .onChange(of: geo.size) { tour.measure() }
         }
