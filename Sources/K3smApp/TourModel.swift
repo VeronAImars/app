@@ -26,8 +26,17 @@ import SwiftUI
 /// preference cannot carry their bounds to one overlay.
 @MainActor
 final class TourModel: ObservableObject {
-    /// The current stop, nil when the tour is not running.
+    /// The stop the guide is at or flying to, nil when the tour is not running.
     @Published private(set) var step: Int?
+    /// The stop whose box and card are shown: the same as `step` once the
+    /// guide has landed there, nil while it flies, so the guide leads.
+    @Published private(set) var lit: Int?
+    /// The guide's current flight: from a stop or its home on the wordmark
+    /// (nil) to a stop or home, starting at `start`. The overlay places the
+    /// guide along `Tour.flightPoint` from these.
+    @Published private(set) var flight: GuideFlight?
+    /// Counts moves, so a reveal still pending from an earlier stop is dropped.
+    private var move = 0
     /// The stops, built when the tour starts from this Mac's place in its
     /// cluster, so the first one says what the panel's heading says.
     @Published private(set) var steps = Tour.steps(for: .unknown)
@@ -58,6 +67,7 @@ final class TourModel: ObservableObject {
     }
 
     var current: TourStep? { step.map { steps[$0] } }
+    var litStop: TourStep? { lit.map { steps[$0] } }
 
     /// start shows the first stop. The user's layout is saved and the one
     /// every stop can be seen in is applied; ending the tour restores it.
@@ -92,14 +102,31 @@ final class TourModel: ObservableObject {
     private func go(to i: Int) {
         let target = steps[i].target
         if target.inPanel { scrollTarget = target }
+        move += 1
+        let this = move
+        // The box and card go dark while the guide flies to the next stop,
+        // and light when it lands there. The first flight leaves from the
+        // wordmark, so the guide is seen taking off rather than appearing.
+        lit = nil
+        let from = markAway ? flight?.to : nil
         markAway = true
+        flight = GuideFlight(from: from, to: target, start: Date())
         step = i
         // Measure after the layout change and any scroll have been drawn.
         DispatchQueue.main.async { [weak self] in self?.measure() }
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) { [weak self] in self?.measure() }
+        let delay = Tour.reveal(reduceMotion: NSWorkspace.shared.accessibilityDisplayShouldReduceMotion)
+        DispatchQueue.main.asyncAfter(deadline: .now() + delay) { [weak self] in
+            guard let self, self.move == this, self.step == i else { return }
+            self.measure()
+            self.lit = i
+        }
     }
 
     private func finish() {
+        move += 1
+        lit = nil
+        flight = GuideFlight(from: flight?.to, to: nil, start: Date())
         step = nil
         if let keys { NSEvent.removeMonitor(keys) }
         keys = nil
@@ -107,9 +134,10 @@ final class TourModel: ObservableObject {
         saved = nil
         measure()
         // The mark flies home before it becomes the wordmark's glyph again.
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.9) { [weak self] in
+        DispatchQueue.main.asyncAfter(deadline: .now() + Tour.flight) { [weak self] in
             guard let self, self.step == nil else { return }
             self.markAway = false
+            self.flight = nil
         }
     }
 
@@ -138,6 +166,14 @@ final class TourModel: ObservableObject {
     func register(_ view: NSView, for target: TourTarget) { targets[target] = WeakView(view) }
     func registerHome(_ view: NSView) { homeView = WeakView(view) }
     func registerOverlay(_ view: NSView) { overlayView = WeakView(view) }
+}
+
+/// GuideFlight is one flight of the tour's guide: from a stop, or its home on
+/// the wordmark when nil, to a stop or home, starting at `start`.
+struct GuideFlight: Equatable {
+    let from: TourTarget?
+    let to: TourTarget?
+    let start: Date
 }
 
 /// TourLayoutAccess reads and applies the console layout the tour depends

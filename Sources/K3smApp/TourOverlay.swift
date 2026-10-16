@@ -36,63 +36,79 @@ struct TourOverlay: View {
     var body: some View {
         GeometryReader { geo in
             ZStack(alignment: .topLeading) {
-                if let i = tour.step, let current = tour.current, let stop = rect(for: current.target) {
-                    let rect = Tour.highlight(stop, in: geo.size)
-                    let origin = Tour.card(Self.card, by: rect, in: geo.size)
+                if tour.step != nil {
+                    // The window dims as soon as the tour runs; the stop is cut
+                    // out of it only once the guide has landed there.
+                    let lit = tour.litStop.flatMap { stop in rect(for: stop.target).map { (stop, Tour.highlight($0, in: geo.size)) } }
                     Self.dim
                         .mask {
                             ZStack {
                                 Rectangle()
-                                RoundedRectangle(cornerRadius: 12).frame(width: rect.width, height: rect.height)
-                                    .position(x: rect.midX, y: rect.midY)
-                                    .blendMode(.destinationOut)
+                                if let (_, rect) = lit {
+                                    RoundedRectangle(cornerRadius: 12).frame(width: rect.width, height: rect.height)
+                                        .position(x: rect.midX, y: rect.midY)
+                                        .blendMode(.destinationOut)
+                                }
                             }
                             .compositingGroup()
                         }
                         .contentShape(Rectangle())
                         .onTapGesture { tour.end() }
-                    RoundedRectangle(cornerRadius: 12)
-                        .stroke(Palette.glow, lineWidth: 2)
-                        .shadow(color: Palette.glow.opacity(0.7), radius: 12)
-                        .frame(width: rect.width, height: rect.height)
-                        .position(x: rect.midX, y: rect.midY)
+                    if let i = tour.lit, let (current, rect) = lit {
+                        let origin = Tour.card(Self.card, by: rect, in: geo.size)
+                        RoundedRectangle(cornerRadius: 12)
+                            .stroke(Palette.glow, lineWidth: 2)
+                            .shadow(color: Palette.glow.opacity(0.7), radius: 12)
+                            .frame(width: rect.width, height: rect.height)
+                            .position(x: rect.midX, y: rect.midY)
+                            .allowsHitTesting(false)
+                        TimelineView(.animation(paused: reduceMotion)) { context in
+                            let phase = reduceMotion ? 1 : context.date.timeIntervalSinceReferenceDate.truncatingRemainder(dividingBy: 1.1) / 1.1
+                            // The pulse grows from the box toward its padded ring, but
+                            // never past the window's edge.
+                            let ring = Tour.highlight(rect, in: geo.size, pad: 10 * phase, margin: 1)
+                            RoundedRectangle(cornerRadius: 18)
+                                .stroke(Palette.glow.opacity(0.35), lineWidth: 1)
+                                .frame(width: ring.width, height: ring.height)
+                                .position(x: ring.midX, y: ring.midY)
+                                .opacity(0.9 * (1 - phase))
+                        }
                         .allowsHitTesting(false)
-                    TimelineView(.animation(paused: reduceMotion)) { context in
-                        let phase = reduceMotion ? 1 : context.date.timeIntervalSinceReferenceDate.truncatingRemainder(dividingBy: 1.1) / 1.1
-                        // The pulse grows from the box toward its padded ring, but
-                        // never past the window's edge.
-                        let ring = Tour.highlight(rect, in: geo.size, pad: 10 * phase, margin: 1)
-                        RoundedRectangle(cornerRadius: 18)
-                            .stroke(Palette.glow.opacity(0.35), lineWidth: 1)
-                            .frame(width: ring.width, height: ring.height)
-                            .position(x: ring.midX, y: ring.midY)
-                            .opacity(0.9 * (1 - phase))
+                        TourCard(step: i, total: tour.steps.count, current: current, back: tour.back, next: tour.next)
+                            .frame(width: Self.card.width)
+                            .offset(x: origin.x, y: origin.y)
+                            .transition(.opacity)
                     }
-                    .allowsHitTesting(false)
-                    TourCard(step: i, total: tour.steps.count, current: current, back: tour.back, next: tour.next)
-                        .frame(width: Self.card.width)
-                        .offset(x: origin.x, y: origin.y)
-                        .transition(.opacity)
                 }
-                if tour.markAway, let home = local(tour.home) {
-                    let at = tour.current.flatMap { rect(for: $0.target) }.map { Tour.landing(by: Tour.highlight($0, in: geo.size), in: geo.size) }
-                        ?? CGPoint(x: home.midX, y: home.midY)
+                if tour.markAway, let home = local(tour.home), let flight = tour.flight {
+                    let size = geo.size
+                    let homePoint = CGPoint(x: home.midX, y: home.midY)
+                    let from = point(of: flight.from, home: homePoint, in: size)
+                    let to = point(of: flight.to, home: homePoint, in: size)
+                    // The guide's place is read from the clock along its flight
+                    // path; under Reduce Motion it is at the end of the flight.
                     TimelineView(.animation(paused: reduceMotion)) { context in
+                        let t = reduceMotion ? 1 : context.date.timeIntervalSince(flight.start) / Tour.flight
                         FlappingButterfly(angle: reduceMotion ? 0 : Tour.guideAngle(at: context.date.timeIntervalSinceReferenceDate), color: .white)
+                            .frame(width: 30, height: 30)
+                            .shadow(color: Palette.glow.opacity(0.9), radius: 6)
+                            .shadow(color: Palette.glow.opacity(0.6), radius: 16)
+                            .position(Tour.flightPoint(from: from, to: to, at: t, in: size))
                     }
-                    .frame(width: 30, height: 30)
-                    .shadow(color: Palette.glow.opacity(0.9), radius: 6)
-                    .shadow(color: Palette.glow.opacity(0.6), radius: 16)
-                    .position(at)
-                    .animation(reduceMotion ? nil : .easeInOut(duration: 0.9), value: at)
                     .allowsHitTesting(false)
                 }
             }
-            .animation(reduceMotion ? nil : .spring(duration: 0.55, bounce: 0.15), value: tour.step)
+            .animation(reduceMotion ? nil : .spring(duration: 0.55, bounce: 0.15), value: tour.lit)
             .background(TourReporter(tour: tour, role: .overlay))
             .onChange(of: geo.size) { tour.measure() }
         }
         .allowsHitTesting(tour.step != nil)
+    }
+
+    /// Where the guide sits for a stop (beside its lit box), or at home on the
+    /// wordmark for nil.
+    private func point(of target: TourTarget?, home: CGPoint, in size: CGSize) -> CGPoint {
+        target.flatMap { rect(for: $0) }.map { Tour.landing(by: Tour.highlight($0, in: size), in: size) } ?? home
     }
 
     /// The stop's frame in the overlay; `Tour.highlight` pads and clamps it.

@@ -190,15 +190,49 @@ public enum Tour {
     }
 
     /// landing is where the guide settles by a stop: above its top-right
-    /// corner; below it when the stop is near the top edge; and inside its
-    /// top-right corner when the stop runs from top to bottom (the pod list,
-    /// the inspector), so the guide never leaves the window.
+    /// corner; below it when the stop is near the top edge; and, when the
+    /// stop runs from top to bottom (the inspector), perched on its top-left
+    /// corner, on the box's edge, so it never covers the stop's content and
+    /// never leaves the window.
     public static func landing(by r: CGRect, in size: CGSize) -> CGPoint {
         let edge: CGFloat = 20
         let x = max(edge, min(r.maxX - 6, size.width - edge))
         if r.minY > 40 { return CGPoint(x: x, y: r.minY - 12) }
         if r.maxY + 14 <= size.height - edge { return CGPoint(x: x, y: r.maxY + 14) }
-        return CGPoint(x: min(x, r.maxX - 24), y: max(edge, r.minY + 24))
+        return CGPoint(x: max(edge, min(r.minX, size.width - edge)), y: max(edge, r.minY + 14))
+    }
+
+    /// flightPoint is where the guide is `t` (0 to 1) into a flight from `a`
+    /// to `b`: it eases out and in, rises in an arc rather than going
+    /// straight, and bobs three times as it flaps, the bob fading to nothing
+    /// at take-off and landing. The point stays inside `size`.
+    public static func flightPoint(from a: CGPoint, to b: CGPoint, at t: Double, in size: CGSize) -> CGPoint {
+        let u = min(max(t, 0), 1)
+        let s = u * u * (3 - 2 * u)
+        let dx = Double(b.x - a.x), dy = Double(b.y - a.y)
+        let d = (dx * dx + dy * dy).squareRoot()
+        guard d > 0.5 else { return b }
+        // The unit normal to the path that points up the window (y down).
+        var nx = -dy / d, ny = dx / d
+        if ny > 0 { nx = -nx; ny = -ny }
+        let lift = min(0.3 * d, 140)
+        let cx = Double(a.x + b.x) / 2 + nx * lift, cy = Double(a.y + b.y) / 2 + ny * lift
+        let x = (1 - s) * (1 - s) * Double(a.x) + 2 * (1 - s) * s * cx + s * s * Double(b.x)
+        let y = (1 - s) * (1 - s) * Double(a.y) + 2 * (1 - s) * s * cy + s * s * Double(b.y)
+        let bob = 9 * sin(Double.pi * s) * sin(6 * Double.pi * s)
+        let margin = 16.0
+        return CGPoint(x: min(max(x + nx * bob, margin), Double(size.width) - margin),
+                       y: min(max(y + ny * bob, margin), Double(size.height) - margin))
+    }
+
+    /// flight is how long the guide takes to fly from one stop to the next.
+    public static let flight: TimeInterval = 0.9
+
+    /// reveal is how long after the guide sets off a stop is lit: when the
+    /// guide lands, so it leads the tour rather than chasing the box. With
+    /// Reduce Motion there is no flight, and the stop is lit at once.
+    public static func reveal(reduceMotion: Bool) -> TimeInterval {
+        reduceMotion ? 0 : flight
     }
 
     /// guideAngle is the guide's hinge angle while it flies, in degrees: a
