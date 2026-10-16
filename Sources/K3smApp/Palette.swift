@@ -80,7 +80,7 @@ enum Palette {
         switch tone {
         case .healthy: return okOnDark
         case .notChecked: return .white.opacity(0.55)
-        case .attention: return .orange
+        case .attention: return warnOnDark
         }
     }
 
