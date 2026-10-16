@@ -109,6 +109,17 @@ struct TourTests {
         #expect(p.y < inspector.minY + 30)
     }
 
+    @Test("with no side free, a big stop holds the card in its lower-right corner")
+    func cardInside() {
+        let size = CGSize(width: 1000, height: 718), card = CGSize(width: 330, height: 262)
+        let pods = CGRect(x: 4, y: 24, width: 690, height: 690)   // the pod list, with the inspector beside it
+        let p = Tour.card(card, by: pods, in: size)
+        let box = CGRect(origin: p, size: card)
+        #expect(box.maxY <= size.height - 12, "card bottom \(box.maxY)")
+        #expect(pods.contains(box), "card \(box) not inside the stop")
+        #expect(box.maxX == pods.maxX - 16)
+    }
+
     @Test("the keyboard", arguments: [
         (UInt16(124), false, Tour.Key?.some(.next)), (125, false, .next), (36, false, .next), (49, false, .next),
         (123, false, .back), (126, false, .back), (53, false, .end),

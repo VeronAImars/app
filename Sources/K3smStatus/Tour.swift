@@ -170,7 +170,9 @@ public enum Tour {
 
     /// card is the caption card's origin: right of the target, else below,
     /// left, above; the first that fits inside `size` with a margin and does
-    /// not cover the target. When none fits it is clamped inside.
+    /// not cover the target. When none fits, a stop big enough to hold the
+    /// card (the pod list) takes it in its lower-right corner, over its own
+    /// empty space rather than a neighbour; otherwise it is clamped inside.
     public static func card(_ card: CGSize, by r: CGRect, in size: CGSize) -> CGPoint {
         let m: CGFloat = 12, gap: CGFloat = 22
         func clampX(_ x: CGFloat) -> CGFloat { max(m, min(size.width - card.width - m, x)) }
@@ -185,6 +187,10 @@ public enum Tour {
             let box = CGRect(origin: t, size: card)
             if box.minX < m || box.maxX > size.width - m || box.minY < m || box.maxY > size.height - m { continue }
             if !box.intersects(r) { return t }
+        }
+        let inset: CGFloat = 16
+        if r.width >= card.width + 2 * inset, r.height >= card.height + 2 * inset {
+            return CGPoint(x: clampX(r.maxX - card.width - inset), y: clampY(r.maxY - card.height - inset))
         }
         return CGPoint(x: clampX(r.maxX + gap), y: clampY(r.maxY + gap))
     }
