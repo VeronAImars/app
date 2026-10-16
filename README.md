@@ -118,6 +118,14 @@ login** in the app's Settings turns it off or on again (see
 - The **Update** button appears at the top right of the console, beside the
   search field, when k3sm reports a newer release for the cluster. It runs
   the cluster's managed update (see [The managed update](#the-managed-update)).
+- The **info button** opens the status popover: the state of this Mac (and
+  who stopped k3sm, when it is stopped), only the checks that need
+  attention, or "All N checks are ok." when none does, the installed
+  version with an **Update** button while k3sm reports a newer release, and
+  Stop, Restart or Start. **All checks**, closed at first, holds every check
+  and Refresh; the app remembers whether you left it open. The log of an
+  install, update or uninstall shows there only while one runs or after one
+  failed. Connections from other devices and Uninstall are in Settings.
 - The **tabs** above the list are:
   - **Workloads**: every pod, with the Mac it runs on. Its **Events** switch
     shows the cluster's events instead, newest first and at most 200, with a
@@ -391,6 +399,23 @@ The **General** pane:
   its first width and view, shown, and shows the details column. Tabs,
   searches and selections stay as they are.
 
+The **Network** pane holds **Allow connections from other devices** (see
+[Connections from other devices](#connections-from-other-devices)), with
+the setting now, the listeners it controls, those it never closes, and the
+address this node answers on once the console has read the node list.
+Opening the pane reads the status again. A Mac with no k3sm node says it has
+no network settings.
+
+The **Advanced** pane:
+
+- **Write a Bug Report…**, **Live Status** and **Open Logs**, the same
+  actions as in the status item's menu.
+- **Uninstall k3sm…**, with **Also delete k3sm's data** (see
+  [Uninstalling](#uninstalling)).
+- **Reset to Defaults…** asks, then puts every preference above back to its
+  first value, and closes the status popover's All checks. Open at login,
+  the window layout and k3sm itself stay as they are.
+
 ## The managed update
 
 A server checks for a new k3sm release at most once an hour (`sudo k3sm
@@ -423,7 +448,7 @@ the reason as their help text.
 
 ## Connections from other devices
 
-The window carries a checkbox, **Allow connections from other
+Settings > Network carries a checkbox, **Allow connections from other
 devices**, with the note "Off: only this Mac and your cluster mesh". It is the
 setting `k3sm network lan` records: with it on, the NodePort, LoadBalancer and
 (on a server) ingress listeners of your workloads answer on every network
@@ -492,7 +517,7 @@ New versions of the app arrive as a new disk image (or, later, through
 
 ## Uninstalling
 
-The window's **Uninstall k3sm** action asks for confirmation, then runs
+**Uninstall k3sm…** in Settings > Advanced asks for confirmation, then runs
 `k3sm uninstall` through the same verified copy-out. It stops k3sm and removes
 it, and keeps the cluster's data.
 
