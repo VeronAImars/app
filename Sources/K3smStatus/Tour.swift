@@ -47,9 +47,35 @@ public struct TourStep: Sendable, Equatable {
 /// order, how the keyboard steps through them, the console layout it shows
 /// them in, and where the caption card goes.
 public enum Tour {
-    public static let steps: [TourStep] = [
-        TourStep(target: .summary, title: "This Mac is the cluster",
-                 text: "One Mac runs the whole thing: control plane, scheduler and the workloads, with no Linux virtual machine in the way. What you see on the left is the machine itself."),
+    /// steps is the tour for this Mac's place in its cluster: the first
+    /// stop says what the panel's heading says (`ClusterDisplay.shape`),
+    /// and the other five are the same everywhere.
+    public static func steps(for shape: ClusterShape) -> [TourStep] {
+        [first(for: shape)] + rest
+    }
+
+    /// The number of stops, whatever the shape.
+    public static let count = 1 + rest.count
+
+    /// first is the summary stop, true for each shape.
+    public static func first(for shape: ClusterShape) -> TourStep {
+        switch shape {
+        case .single:
+            return TourStep(target: .summary, title: "This Mac is the cluster",
+                            text: "One Mac runs the whole thing: control plane, scheduler and the workloads, with no Linux virtual machine in the way. What you see on the left is the machine itself.")
+        case .serverWithWorkers(let macs):
+            return TourStep(target: .summary, title: "This Mac runs the cluster",
+                            text: "This Mac is the server for a cluster of \(macs) Macs: it runs the control plane and the scheduler, and every Mac runs workloads, with no Linux virtual machine in the way. The panel shows this Mac; its switch shows the whole cluster.")
+        case .worker:
+            return TourStep(target: .summary, title: "This Mac has joined a cluster",
+                            text: "This Mac is a worker: the control plane runs on the server Mac, and this Mac runs the workloads it is given, with no Linux virtual machine in the way. What you see on the left is this Mac.")
+        case .unknown:
+            return TourStep(target: .summary, title: "This Mac",
+                            text: "What you see on the left is this Mac: its state, what its pods ask of it, and what it has. The rest of the cluster shows here once k3sm reports it.")
+        }
+    }
+
+    static let rest: [TourStep] = [
         TourStep(target: .cores, title: "Cores and memory, by pod",
                  text: "What the pods ask of this Mac, against what it has. Squares are performance cores, circles efficiency cores."),
         TourStep(target: .tabs, title: "Workloads, images and builds",
@@ -85,7 +111,7 @@ public enum Tour {
     /// or nil when the tour ends (Escape, or forward from the last stop).
     public static func step(after key: Key, from i: Int) -> Int? {
         switch key {
-        case .next: return i + 1 < steps.count ? i + 1 : nil
+        case .next: return i + 1 < count ? i + 1 : nil
         case .back: return max(0, i - 1)
         case .end: return nil
         }

@@ -174,7 +174,8 @@ final class AppModel: ObservableObject {
             consolePanelCollapsed = layout.panelCollapsed
             panelMode = layout.panelMode
             inspectorShown = layout.inspectorShown
-        }))
+        },
+        shape: { [unowned self] in ClusterDisplay.shape(of: report) }))
     @Published private(set) var report: StatusReport? {
         didSet { workloads.ownNode = WorkloadsDisplay.ownNode(in: report) }
     }

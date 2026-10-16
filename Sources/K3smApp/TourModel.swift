@@ -19,7 +19,7 @@ import K3smStatus
 import SwiftUI
 
 /// TourModel is the guided tour's state, kept here rather than in views
-/// (no view in this app holds state). It runs the stops in `Tour.steps`,
+/// (no view in this app holds state). It runs the stops `Tour.steps` gives,
 /// applies the layout every stop can be seen in and puts the user's back
 /// when the tour ends, and measures the stops in window coordinates: the
 /// console's panel and content are hosted separately, so a SwiftUI
@@ -28,6 +28,9 @@ import SwiftUI
 final class TourModel: ObservableObject {
     /// The current stop, nil when the tour is not running.
     @Published private(set) var step: Int?
+    /// The stops, built when the tour starts from this Mac's place in its
+    /// cluster, so the first one says what the panel's heading says.
+    @Published private(set) var steps = Tour.steps(for: .unknown)
     /// The stops' frames in window coordinates (origin bottom left), measured
     /// when a stop is shown and when the window changes size.
     @Published private(set) var frames: [TourTarget: CGRect] = [:]
@@ -54,12 +57,13 @@ final class TourModel: ObservableObject {
         self.layout = layout
     }
 
-    var current: TourStep? { step.map { Tour.steps[$0] } }
+    var current: TourStep? { step.map { steps[$0] } }
 
     /// start shows the first stop. The user's layout is saved and the one
     /// every stop can be seen in is applied; ending the tour restores it.
     func start() {
         if step == nil {
+            steps = Tour.steps(for: layout.shape())
             saved = layout.read()
             layout.apply(Tour.shown)
             keys = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
@@ -86,7 +90,7 @@ final class TourModel: ObservableObject {
     }
 
     private func go(to i: Int) {
-        let target = Tour.steps[i].target
+        let target = steps[i].target
         if target.inPanel { scrollTarget = target }
         markAway = true
         step = i
@@ -141,6 +145,8 @@ final class TourModel: ObservableObject {
 struct TourLayoutAccess {
     let read: @MainActor () -> Tour.Layout
     let apply: @MainActor (Tour.Layout) -> Void
+    /// This Mac's place in its cluster, from the latest status report.
+    let shape: @MainActor () -> ClusterShape
 }
 
 /// WeakView holds a reporting view without keeping it alive.

@@ -69,7 +69,7 @@ struct TourOverlay: View {
                             .opacity(0.9 * (1 - phase))
                     }
                     .allowsHitTesting(false)
-                    TourCard(step: i, total: Tour.steps.count, current: current, back: tour.back, next: tour.next)
+                    TourCard(step: i, total: tour.steps.count, current: current, back: tour.back, next: tour.next)
                         .frame(width: Self.card.width)
                         .offset(x: origin.x, y: origin.y)
                         .transition(.opacity)

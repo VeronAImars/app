@@ -24,10 +24,30 @@ import Testing
 struct TourTests {
     @Test("six stops, one per target, in order")
     func stops() {
-        #expect(Tour.steps.map(\.target) == [.summary, .cores, .tabs, .pods, .inspector, .info])
-        #expect(Set(Tour.steps.map(\.target)).count == TourTarget.allCases.count)
-        #expect(Tour.steps.allSatisfy { !$0.title.isEmpty && !$0.text.isEmpty })
+        for shape in Self.shapes {
+            let steps = Tour.steps(for: shape)
+            #expect(steps.map(\.target) == [.summary, .cores, .tabs, .pods, .inspector, .info])
+            #expect(steps.count == Tour.count)
+            #expect(steps.allSatisfy { !$0.title.isEmpty && !$0.text.isEmpty })
+        }
+        #expect(Set(Tour.steps(for: .single).map(\.target)).count == TourTarget.allCases.count)
         #expect(TourTarget.allCases.filter(\.inPanel) == [.summary, .cores])
+    }
+
+    static let shapes: [ClusterShape] = [.single, .serverWithWorkers(macs: 3), .worker, .unknown]
+
+    @Test("the first stop says what the panel's heading says, for each shape")
+    func firstStop() {
+        #expect(Tour.first(for: .single).title == ClusterDisplay.singleTitle)
+        #expect(Tour.first(for: .unknown).title == ClusterDisplay.unknownTitle)
+        #expect(Tour.first(for: .serverWithWorkers(macs: 3)).text.contains("a cluster of 3 Macs"))
+        #expect(Tour.first(for: .worker).text.contains("the control plane runs on the server Mac"))
+        // Only a single Mac runs the whole thing; no other shape may say so.
+        for shape in Self.shapes where shape != .single {
+            let stop = Tour.first(for: shape)
+            #expect(!stop.text.contains("One Mac runs the whole thing"), "\(shape)")
+            #expect(stop.title != ClusterDisplay.singleTitle, "\(shape)")
+        }
     }
 
     @Test("the keyboard", arguments: [
@@ -41,7 +61,7 @@ struct TourTests {
 
     @Test("stepping: forward ends after the last stop, back stops at the first, Escape ends")
     func stepping() {
-        let last = Tour.steps.count - 1
+        let last = Tour.count - 1
         #expect(Tour.step(after: .next, from: 0) == 1)
         #expect(Tour.step(after: .next, from: last) == nil)
         #expect(Tour.step(after: .back, from: 0) == 0)
