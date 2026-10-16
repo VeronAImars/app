@@ -75,7 +75,13 @@ struct TourTests {
         #expect(Tour.reveal(reduceMotion: true) == 0)
     }
 
-    @Test("a flight starts and ends exactly, arcs off the straight line, and stays inside")
+    /// How far `p` is from the straight line through `a` and `b`.
+    static func offLine(_ p: CGPoint, _ a: CGPoint, _ b: CGPoint) -> CGFloat {
+        let dx = b.x - a.x, dy = b.y - a.y
+        return abs(dy * p.x - dx * p.y + b.x * a.y - b.y * a.x) / (dx * dx + dy * dy).squareRoot()
+    }
+
+    @Test("a flight is a straight glide that starts and ends exactly and stays inside")
     func flight() {
         let size = CGSize(width: 1180, height: 732)
         let a = CGPoint(x: 40, y: 680), b = CGPoint(x: 1100, y: 40)
@@ -83,15 +89,14 @@ struct TourTests {
         #expect(Tour.flightPoint(from: a, to: b, at: 1, in: size) == b)
         #expect(Tour.flightPoint(from: a, to: b, at: -1, in: size) == a)
         #expect(Tour.flightPoint(from: a, to: b, at: 2, in: size) == b)
-        // Halfway, the guide is well off the straight line between the stops.
-        let mid = Tour.flightPoint(from: a, to: b, at: 0.5, in: size)
-        let dx = b.x - a.x, dy = b.y - a.y
-        let off = abs(dy * mid.x - dx * mid.y + b.x * a.y - b.y * a.x) / (dx * dx + dy * dy).squareRoot()
-        #expect(off > 60, "only \(off) off the line")
         for i in 0...100 {
             let p = Tour.flightPoint(from: a, to: b, at: Double(i) / 100, in: size)
+            #expect(Self.offLine(p, a, b) < 0.01)
             #expect(p.x >= 16 && p.x <= size.width - 16 && p.y >= 16 && p.y <= size.height - 16)
         }
+        // It eases: a tenth of the way through, it has covered less than a tenth of the distance.
+        let early = Tour.flightPoint(from: a, to: b, at: 0.1, in: size)
+        #expect(early.x - a.x < (b.x - a.x) * 0.1)
         #expect(Tour.flightPoint(from: b, to: b, at: 0.5, in: size) == b)
     }
 
