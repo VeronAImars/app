@@ -37,6 +37,31 @@ struct ClusterDisplayTests {
         return (report, nodes, pods)
     }
 
+    @Test("the cluster's shape", arguments: [
+        ("single", report(workers: [], node: nil, workloads: nil) as StatusReport?, ClusterShape.single),
+        ("server with two workers", report(workers: [
+            StatusWorker(name: "mac-b", role: "agent", version: nil), StatusWorker(name: "mac-c", role: "agent", version: nil),
+        ], node: nil, workloads: nil), .serverWithWorkers(macs: 3)),
+        ("worker", report(role: "agent", workers: nil, node: nil, workloads: nil), .worker),
+        ("server, workers unknown", report(workers: nil, node: nil, workloads: nil), .unknown),
+        ("no report", nil, .unknown),
+    ])
+    func shape(name: String, report: StatusReport?, want: ClusterShape) {
+        #expect(ClusterDisplay.shape(of: report) == want, "\(name)")
+    }
+
+    @Test("the panel's title follows the shape", arguments: reportCases)
+    func titleFollowsShape(_ c: Case) {
+        let want: String
+        switch ClusterDisplay.shape(of: c.report) {
+        case .single: want = ClusterDisplay.singleTitle
+        case .serverWithWorkers: want = ClusterDisplay.clusterTitle
+        case .worker: want = ClusterDisplay.workerTitle
+        case .unknown: want = ClusterDisplay.unknownTitle
+        }
+        #expect(c.want.title == want)
+    }
+
     struct Case: Sendable, CustomTestStringConvertible {
         let name: String
         let report: StatusReport?

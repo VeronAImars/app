@@ -34,12 +34,20 @@ struct MacPanel: View {
     private static let daemons: Set<String> = ["netd", "server", "agent", "apiserver", "node", "datastore"]
 
     private var report: StatusReport? { app.report }
+    private var tour: TourModel { app.tour }
 
     var body: some View {
-        ScrollView(.vertical) {
-            content
-                .padding([.horizontal, .bottom], 20)
-                .frame(maxWidth: .infinity, alignment: .topLeading)
+        ScrollViewReader { proxy in
+            ScrollView(.vertical) {
+                content
+                    .padding([.horizontal, .bottom], 20)
+                    .frame(maxWidth: .infinity, alignment: .topLeading)
+            }
+            .onReceive(tour.$scrollTarget.compactMap { $0 }) { target in
+                // A tour stop in the panel is scrolled into view before it is lit.
+                withAnimation(.easeInOut(duration: 0.3)) { proxy.scrollTo(target, anchor: .top) }
+                tour.scrollTarget = nil
+            }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         .background(Palette.deep)
@@ -49,7 +57,7 @@ struct MacPanel: View {
     /// scrolls, so nothing is cut off in a short window.
     private var content: some View {
         VStack(alignment: .leading, spacing: 14) {
-            Wordmark(flap: app.flap)
+            Wordmark(flap: app.flap, tour: tour)
                 .padding(.top, 44)
             if PanelMode.showsSwitch(nodeCount: cluster.nodeCount) {
                 HStack(spacing: 18) {
@@ -166,11 +174,21 @@ struct MacPanel: View {
             stateRow
             TileGrid(tiles: macTiles, width: shownWidth)
         }
+        .id(TourTarget.summary)
+        .tourTarget(.summary, tour)
         nodesBlock
-        VStack(alignment: .leading, spacing: 10) {
-            CoreGrid(cores: Self.machine.cores, performance: Self.machine.performanceCores, used: coresRequested)
-            Footnote("Squares are performance cores, circles efficiency cores.")
+        VStack(alignment: .leading, spacing: 14) {
+            VStack(alignment: .leading, spacing: 10) {
+                CoreGrid(cores: Self.machine.cores, performance: Self.machine.performanceCores, used: coresRequested)
+                Footnote("Squares are performance cores, circles efficiency cores.")
+            }
+            memoryBlock
         }
+        .id(TourTarget.cores)
+        .tourTarget(.cores, tour)
+    }
+
+    private var memoryBlock: some View {
         PanelBlock("Unified memory", value: "\(WorkloadsDisplay.bytes(workloads.load.memoryUsedBytes)) of \(WorkloadsDisplay.bytes(Self.machine.memoryBytes))") {
             Meter(parts: [(Double(memoryRequested), Palette.fill), (Double(max(0, workloads.load.memoryUsedBytes - memoryRequested)), Palette.fillDim)], total: Double(Self.machine.memoryBytes))
             Legend(rows: [("Requested by pods", Palette.fill, WorkloadsDisplay.bytes(memoryRequested)), ("macOS and apps", Palette.fillDim, WorkloadsDisplay.bytes(workloads.load.memoryUsedBytes))])
@@ -313,10 +331,14 @@ struct MacPanel: View {
 /// pointer entering the mark asks the model for a beat.
 struct Wordmark: View {
     @ObservedObject var flap: FlapModel
+    @ObservedObject var tour: TourModel
 
     var body: some View {
         HStack(spacing: 9) {
+            // While the tour runs the mark is away guiding it, so its spot is empty.
             FlappingButterfly(angle: flap.angle).frame(width: 24, height: 24)
+                .opacity(tour.markAway ? 0 : 1)
+                .tourHome(tour)
                 .onHover { inside in if inside { flap.poke() } }
             Text("k3sm").font(.system(size: 19, weight: .semibold)).foregroundStyle(.white)
         }

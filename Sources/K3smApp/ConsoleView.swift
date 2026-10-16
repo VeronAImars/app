@@ -69,6 +69,7 @@ struct ConsoleView: View {
             content: ConsoleContent(app: app).ignoresSafeArea())
         .frame(minWidth: size.width, minHeight: size.height)
         .background(Palette.surface)
+        .overlay { TourOverlay(tour: app.tour) }
         .ignoresSafeArea()
         .onAppear {
             app.startTabs()
@@ -103,6 +104,7 @@ struct ConsoleContent: View {
                 Divider()
                 Inspector(model: app.workloads)
                     .frame(width: ConsoleView.inspectorWidth)
+                    .tourTarget(.inspector, app.tour)
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -112,7 +114,7 @@ struct ConsoleContent: View {
     @ViewBuilder
     private var section: some View {
         switch app.section {
-        case .workloads: WorkloadsTab(app: app)
+        case .workloads: WorkloadsTab(app: app).tourTarget(.pods, app.tour)
         case .images: ImagesSection(app: app, workloads: app.workloads)
         case .builds:
             if let builds = app.builds {
@@ -158,6 +160,7 @@ struct ConsoleStrip: View {
     var body: some View {
         HStack(spacing: 12) {
             TabStrip(selected: app.section, waiting: app.waiting) { app.section = $0 }
+                .tourTarget(.tabs, app.tour)
             Spacer()
             if let title = app.updateOffer.buttonTitle {
                 let offer = app.updateOffer
@@ -188,10 +191,17 @@ struct ConsoleStrip: View {
             .keyboardShortcut("i", modifiers: [.command, .option])
             .accessibilityLabel(app.inspectorShown ? "Hide details" : "Show details")
             .help(app.inspectorShown ? "Hide details (Command-Option-I)" : "Show details (Command-Option-I)")
+            Button { app.tour.start() } label: {
+                Image(systemName: "questionmark.circle").font(.system(size: 16)).foregroundStyle(Palette.navy)
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel("Take the tour")
+            .help("A short tour of the screen")
             Button { app.statusPanelShown.toggle() } label: {
                 Image(systemName: "info.circle").font(.system(size: 16)).foregroundStyle(Palette.navy)
             }
             .buttonStyle(.plain)
+            .tourTarget(.info, app.tour)
             .help("k3sm on this Mac: start, stop, connections, uninstall")
             .popover(isPresented: $app.statusPanelShown, arrowEdge: .bottom) {
                 StatusPanel(model: app).frame(width: 560)

@@ -52,6 +52,9 @@ enum Palette {
     static let dockMark = Color(red: 0.561, green: 0.643, blue: 1.0)    // #8fa4ff, the mark on the Dock tile
     static let dockMarkGlow = Color(red: 0.435, green: 0.533, blue: 0.996) // #6f88fe, its glow (the mark's dark-mode upper wing)
     static let dockTileGlow = Color(red: 0.239, green: 0.357, blue: 1.0) // #3d5bff, the light behind it
+    static let night = Color(red: 0.024, green: 0.039, blue: 0.18)      // #060a2e, the tour's dimming and card
+    static let glow = Color(red: 0.49, green: 0.576, blue: 1.0)         // #7d93ff, the tour's light
+    static let glowSoft = Color(red: 0.624, green: 0.69, blue: 1.0)     // #9fb0ff, the tour's eyebrow
 
     static let ok = Color(red: 0.090, green: 0.569, blue: 0.310)
     static let warn = Color(red: 0.722, green: 0.416, blue: 0.0)

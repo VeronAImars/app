@@ -18,7 +18,8 @@ import AppKit
 
 /// MainMenu is the menu bar while the window is open: the app menu with
 /// Settings (the status panel), Edit for the search field, View for refresh
-/// and for hiding or showing the console's left panel, and Window. The status item keeps its own menu. The delegate owns one and
+/// and for hiding or showing the console's left panel, Window, and Help with
+/// the tour. The status item keeps its own menu. The delegate owns one and
 /// the items target it.
 @MainActor
 final class MainMenu: NSObject, NSMenuItemValidation {
@@ -38,6 +39,9 @@ final class MainMenu: NSObject, NSMenuItemValidation {
         let window = windowMenu()
         main.addItem(submenu: window)
         NSApp.windowsMenu = window
+        let help = helpMenu()
+        main.addItem(submenu: help)
+        NSApp.helpMenu = help
         NSApp.mainMenu = main
     }
 
@@ -81,11 +85,23 @@ final class MainMenu: NSObject, NSMenuItemValidation {
         return menu
     }
 
+    private func helpMenu() -> NSMenu {
+        let menu = NSMenu(title: "Help")
+        menu.addItem(item("Take the Tour", #selector(startTour(_:)), ""))
+        return menu
+    }
+
     /// An item that targets this object.
     private func item(_ title: String, _ action: Selector, _ key: String) -> NSMenuItem {
         let item = NSMenuItem(title: title, action: action, keyEquivalent: key)
         item.target = self
         return item
+    }
+
+    @objc private func startTour(_ sender: Any?) {
+        show()
+        model.statusPanelShown = false
+        model.tour.start()
     }
 
     @objc private func openSettings(_ sender: Any?) {
@@ -102,6 +118,8 @@ final class MainMenu: NSObject, NSMenuItemValidation {
     /// The panel item reads Hide Panel or Show Panel, and is offered only
     /// while the console is on screen.
     func validateMenuItem(_ menuItem: NSMenuItem) -> Bool {
+        // The tour walks the console, so it is offered only while it is up.
+        if menuItem.action == #selector(startTour(_:)) { return model.screen == .status }
         guard menuItem.action == #selector(togglePanel(_:)) else { return true }
         menuItem.title = model.consolePanelCollapsed ? "Show Panel" : "Hide Panel"
         return model.screen == .status

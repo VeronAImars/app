@@ -85,6 +85,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     func applicationWillTerminate(_ notification: Notification) {
+        // A tour still running puts the user's layout back before it is saved.
+        model?.tour.end()
         poller?.stop()
         if let activity {
             ProcessInfo.processInfo.endActivity(activity)

@@ -183,6 +183,18 @@ public struct PodRequests: Equatable, Sendable {
     }
 }
 
+/// ClusterShape is what this Mac is in its cluster.
+public enum ClusterShape: Equatable, Sendable {
+    /// One Mac: this one runs everything.
+    case single
+    /// This Mac is the server, with workers; `macs` counts all of them.
+    case serverWithWorkers(macs: Int)
+    /// This Mac is a worker; the control plane runs on another Mac.
+    case worker
+    /// Not known yet: no report, or the report has no workers list.
+    case unknown
+}
+
 /// ClusterDisplay turns the status report, the node list and the pod list
 /// into the panel's cluster view and its tiles. The title follows `workers` the way
 /// `NodesDisplay` does: absent is unknown, empty is no other node. A server
@@ -328,10 +340,23 @@ public enum ClusterDisplay {
 
     /// The title, its note, and the Mac count for a server with workers.
     static func title(_ report: StatusReport?) -> (String, String?, Int?) {
-        guard let report else { return (unknownTitle, nil, nil) }
-        if NodeRole.detect(in: report) == .agent { return (workerTitle, nil, nil) }
-        guard let workers = report.workers else { return (unknownTitle, othersUnknown, nil) }
-        return workers.isEmpty ? (singleTitle, nil, nil) : (clusterTitle, nil, workers.count + 1)
+        switch shape(of: report) {
+        case .unknown: return (unknownTitle, report == nil ? nil : othersUnknown, nil)
+        case .worker: return (workerTitle, nil, nil)
+        case .single: return (singleTitle, nil, nil)
+        case .serverWithWorkers(let macs): return (clusterTitle, nil, macs)
+        }
+    }
+
+    /// shape is the cluster's shape as this Mac's report shows it: no report
+    /// or no workers list is unknown, an agent is a worker, and a server is
+    /// alone or has workers. The panel's title and the tour's first stop
+    /// both follow it.
+    public static func shape(of report: StatusReport?) -> ClusterShape {
+        guard let report else { return .unknown }
+        if NodeRole.detect(in: report) == .agent { return .worker }
+        guard let workers = report.workers else { return .unknown }
+        return workers.isEmpty ? .single : .serverWithWorkers(macs: workers.count + 1)
     }
 
     /// This Mac's node name: the first word after "a/b nodes ready · " in

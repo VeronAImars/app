@@ -162,6 +162,21 @@ final class AppModel: ObservableObject {
     let waiting = WaitingModel()
     /// Forwards the loaders' changes to `waiting`.
     private var waitingObservations: [AnyCancellable] = []
+    /// The guided tour. It reads and sets the console layout it shows its
+    /// stops in (the tab, the panel, its mode and the inspector) and puts the
+    /// user's layout back when it ends.
+    private(set) lazy var tour = TourModel(layout: TourLayoutAccess(
+        read: { [unowned self] in
+            Tour.Layout(section: section, workloadsView: workloadsView, panelCollapsed: consolePanelCollapsed, panelMode: panelMode, inspectorShown: inspectorShown)
+        },
+        apply: { [unowned self] layout in
+            section = layout.section
+            workloadsView = layout.workloadsView
+            consolePanelCollapsed = layout.panelCollapsed
+            panelMode = layout.panelMode
+            inspectorShown = layout.inspectorShown
+        },
+        shape: { [unowned self] in ClusterDisplay.shape(of: report) }))
     @Published private(set) var report: StatusReport? {
         didSet { workloads.ownNode = WorkloadsDisplay.ownNode(in: report) }
     }
