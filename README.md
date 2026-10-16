@@ -181,6 +181,13 @@ login** in the app's Settings turns it off or on again (see
   search field, when the update plan has an update for this Mac: the
   app-carried update or the cluster's managed update (see
   [Updating](#updating)).
+- The **status** at the top of the left panel and of the status popover is
+  one state with a coloured dot: Running (green), Degraded or Unknown
+  (amber), Stopped or Not installed (grey), or a newer CLI's word as it
+  prints it. The pod count is a figure in the panel's tiles, and a lock
+  beside the state marks checks that only an administrator can run.
+  VoiceOver reads the state with the cluster's summary,
+  the pod count and how many checks need an administrator.
 - The **info button** opens the status popover: the state of this Mac (and
   who stopped k3sm, when it is stopped), only the checks that need
   attention, or "All N checks are ok." when none does, the installed
@@ -486,16 +493,20 @@ login** in the app's Settings turns it off or on again (see
   appears and goes without flying.
 - The **details button**, beside the info button above the list, collapses
   the details on the right and shows them again; Command-Option-I does the same, and the app remembers the choice.
-- The **left panel** is resizable: drag the divider between it and the list.
-  It goes no narrower than its original width and no wider than its content
-  can use (every tile in one row, or the longest node row with its meters
-  beside it). Wider, the tiles take one row and each node's meters move up
-  beside its name, so node names stop being shortened. Double-click the
+- The **left panel** opens at its natural width: the narrowest at which
+  nothing in the Cluster or This Mac view is squeezed (every tile in one
+  row, the longest node row with its meters beside it, the memory block's
+  figures and legend, the live load bars), the wider of the two views. It
+  keeps that fit as the figures change until you drag the divider between
+  it and the list. You can make it narrower, down to its original width:
+  the tiles then take two columns and each node's meters move under its
+  name. It goes no wider than its natural width; dragging it back there,
+  or Reset Window Layout in Settings, lets it fit itself again. Double-click the
   divider, or choose View > Hide Panel (Command-Option-L), to collapse the
   panel; do it again, or View > Show Panel, to bring it back. The window's
   minimum width follows: the panel's minimum plus the list's, or the list's
-  alone while the panel is hidden. The app remembers the width and whether
-  the panel is hidden.
+  alone while the panel is hidden. The app remembers a width you dragged and
+  whether the panel is hidden.
 - Every tab's **table columns** are resizable: drag the faint line between
   two column titles. The line on a column's far side from the name column
   moves with the pointer, so a column after the name widens as you drag
@@ -524,9 +535,10 @@ The app runs as you, not as root, so some checks are ones only an
 administrator can run (the runtime daemon's owner-only socket, for one). The
 CLI reports those rows as `needs-admin`, and the app shows them with a grey
 glyph and "needs an administrator; run sudo k3sm status". Nothing was checked
-and nothing is wrong, so these rows never count against the verdict; the
-status line says how many there are ("1 check needs an administrator"). Run
-`sudo k3sm status` in a terminal to see them checked.
+and nothing is wrong, so these rows never count against the verdict. While
+there are any, a small lock sits beside the state; its help tag says how many
+("Needs an administrator to read 1 check"). Run `sudo k3sm status` in a
+terminal to see them checked.
 
 ## The menu
 
@@ -631,7 +643,7 @@ The **General** pane:
 - **Take the Tour** brings the window forward and starts the tour, once k3sm
   is installed.
 - **Reset Window Layout…** asks, then puts the console's left panel back to
-  its first width and view, shown, shows the details column, and puts every
+  its natural width (fitting itself again) and first view, shown, shows the details column, and puts every
   table's columns back to their first widths. Tabs, searches and selections
   stay as they are.
 
