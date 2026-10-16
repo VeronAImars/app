@@ -89,6 +89,16 @@
       }
     },
     {
+      "name": "update",
+      "state": "unknown",
+      "severity": "unknown",
+      "detail": "no update check is recorded yet (the server checks once an hour)",
+      "remedy": "sudo k3sm update check",
+      "wide": {
+        "record": "/nonexistent/k3sm-status-contract/status/update.json"
+      }
+    },
+    {
       "name": "kubeconfig",
       "state": "missing",
       "severity": "warn",
@@ -97,9 +107,10 @@
     },
     {
       "name": "runtimed",
-      "state": "unknown",
-      "severity": "unknown",
-      "detail": "needs sudo (socket is owner-only)"
+      "state": "needs-admin",
+      "severity": "skip",
+      "detail": "needs sudo: the runtime daemon's socket is owner-only",
+      "remedy": "sudo k3sm status"
     }
   ],
   "next": [
@@ -107,7 +118,8 @@
     "k3sm kubeconfig --write",
     "sudo k3sm status",
     "k3sm status logs server",
-    "k3sm kubectl get pods -A"
+    "k3sm kubectl get pods -A",
+    "sudo k3sm update check"
   ],
   "version": {
     "version": "v0.1.7",
