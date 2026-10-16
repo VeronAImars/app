@@ -91,6 +91,7 @@ struct TourTests {
     func layout() {
         let shown = Tour.shown
         #expect(shown.section == .workloads)
+        #expect(shown.workloadsView == .pods)
         #expect(!shown.panelCollapsed)
         #expect(shown.panelMode == .thisMac)
         #expect(shown.inspectorShown)

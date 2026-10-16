@@ -132,22 +132,24 @@ public enum Tour {
     /// Layout is the part of the console's state the tour depends on.
     public struct Layout: Equatable, Sendable {
         public var section: ConsoleSection
+        public var workloadsView: WorkloadsView
         public var panelCollapsed: Bool
         public var panelMode: PanelMode?
         public var inspectorShown: Bool
 
-        public init(section: ConsoleSection, panelCollapsed: Bool, panelMode: PanelMode?, inspectorShown: Bool) {
+        public init(section: ConsoleSection, workloadsView: WorkloadsView, panelCollapsed: Bool, panelMode: PanelMode?, inspectorShown: Bool) {
             self.section = section
+            self.workloadsView = workloadsView
             self.panelCollapsed = panelCollapsed
             self.panelMode = panelMode
             self.inspectorShown = inspectorShown
         }
     }
 
-    /// shown is the layout every stop can be seen in: the Workloads tab, the
-    /// panel open on This Mac, and the inspector shown. The tour applies it
+    /// shown is the layout every stop can be seen in: the Workloads tab on
+    /// its pod list, the panel open on This Mac, and the inspector shown. The tour applies it
     /// while it runs and puts the user's layout back when it ends.
-    public static let shown = Layout(section: .workloads, panelCollapsed: false, panelMode: .thisMac, inspectorShown: true)
+    public static let shown = Layout(section: .workloads, workloadsView: .pods, panelCollapsed: false, panelMode: .thisMac, inspectorShown: true)
 
     /// local converts a rectangle in window coordinates (origin at the
     /// bottom left) to the coordinates of a view whose own frame in the

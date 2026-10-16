@@ -167,10 +167,11 @@ final class AppModel: ObservableObject {
     /// user's layout back when it ends.
     private(set) lazy var tour = TourModel(layout: TourLayoutAccess(
         read: { [unowned self] in
-            Tour.Layout(section: section, panelCollapsed: consolePanelCollapsed, panelMode: panelMode, inspectorShown: inspectorShown)
+            Tour.Layout(section: section, workloadsView: workloadsView, panelCollapsed: consolePanelCollapsed, panelMode: panelMode, inspectorShown: inspectorShown)
         },
         apply: { [unowned self] layout in
             section = layout.section
+            workloadsView = layout.workloadsView
             consolePanelCollapsed = layout.panelCollapsed
             panelMode = layout.panelMode
             inspectorShown = layout.inspectorShown
