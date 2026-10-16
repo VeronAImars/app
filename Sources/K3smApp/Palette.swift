@@ -57,6 +57,13 @@ enum Palette {
     static let warn = Color(red: 0.722, green: 0.416, blue: 0.0)
     static let bad = Color(red: 0.788, green: 0.188, blue: 0.173)
     static let unknown = Color(red: 0.616, green: 0.631, blue: 0.702)
+    /// The system orange: a node that is not ready, or a cluster that is not
+    /// running, as a dot on the navy panel.
+    static let warnOnDark = Color.orange
+    /// The system red: a down daemon's dot in the status item's menu.
+    static let down = Color(nsColor: .systemRed)
+    /// The system red: an entry the first-run form refuses.
+    static let errorText = Color.red
 
     /// A status row's glyph and text on the window's light side: green when
     /// healthy, grey when not checked, amber when it needs attention.
@@ -73,7 +80,7 @@ enum Palette {
         switch tone {
         case .healthy: return okOnDark
         case .notChecked: return .white.opacity(0.55)
-        case .attention: return .orange
+        case .attention: return warnOnDark
         }
     }
 

@@ -84,7 +84,7 @@ struct FirstRunView: View {
                 TextField("Server address, for example studio.local", text: $model.serverText)
                     .textFieldStyle(.roundedBorder)
                 if let error = model.addressError {
-                    Text(verbatim: error).foregroundStyle(.red)
+                    Text(verbatim: error).foregroundStyle(Palette.errorText)
                 }
                 SecureField("Join token from `k3sm token create` on the server", text: $model.token)
                     .textFieldStyle(.roundedBorder)

@@ -122,7 +122,7 @@ struct MacPanel: View {
     /// A node row's first part: the dot, the name, the tag, the role and the pods.
     private func nodeHeading(_ node: ClusterNodeRow) -> some View {
         HStack(spacing: 6) {
-            Circle().fill(node.isReady ? Palette.okOnDark : .orange).frame(width: 7, height: 7)
+            Circle().fill(node.isReady ? Palette.okOnDark : Palette.warnOnDark).frame(width: 7, height: 7)
                 .accessibilityLabel(Text(verbatim: node.ready))
             Text(verbatim: node.name).font(.system(size: 12, weight: .medium)).foregroundStyle(.white)
                 .lineLimit(1).truncationMode(.middle)
@@ -178,7 +178,7 @@ struct MacPanel: View {
 
     private var stateRow: some View {
         HStack(spacing: 7) {
-            Circle().fill(report?.verdict == .running ? Palette.okOnDark : .orange).frame(width: 8, height: 8)
+            Circle().fill(report?.verdict == .running ? Palette.okOnDark : Palette.warnOnDark).frame(width: 8, height: 8)
             Text(verbatim: stateLine).font(.system(size: 12)).foregroundStyle(.white)
             // The pod figures' age, once their read is late or failing.
             TimelineView(.periodic(from: .now, by: 5)) { context in
