@@ -76,6 +76,14 @@ struct ControllerTests {
         #expect(try Controller.decodeReplicaSetOwner(Data(hostile.utf8)) == nil)
     }
 
+    @Test("a ReplicaSet whose only owner is not marked as its controller has none", arguments: [
+        #"{"kind":"ReplicaSet","metadata":{"ownerReferences":[{"apiVersion":"apps/v1","kind":"Deployment","name":"web","controller":false}]}}"#,
+        #"{"kind":"ReplicaSet","metadata":{"ownerReferences":[{"apiVersion":"apps/v1","kind":"Deployment","name":"web"}]}}"#,
+    ])
+    func unmarkedOwner(json: String) throws {
+        #expect(try Controller.decodeReplicaSetOwner(Data(json.utf8)) == nil)
+    }
+
     @Test("the controller is the ReplicaSet's owner when there is one, else the pod's owner")
     func resolve() {
         let rs = OwnerRef(kind: "ReplicaSet", name: "web-5d8f")

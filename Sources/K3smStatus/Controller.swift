@@ -62,13 +62,15 @@ public enum Controller {
     }
 
     /// The ReplicaSet's own controller from `kubectl get replicaset -o json`:
-    /// the owner reference marked as the controller, else the first; nil
-    /// when the ReplicaSet has no owner. Anything but a ReplicaSet is refused.
+    /// the owner reference marked `controller: true`, as apimachinery's
+    /// `GetControllerOf` picks it; nil when no reference is marked. A
+    /// reference without the mark is an ownership link for garbage
+    /// collection, not the object that scales the ReplicaSet. Anything but a
+    /// ReplicaSet is refused.
     public static func decodeReplicaSetOwner(_ data: Data) throws -> OwnerRef? {
         let wire = try JSONDecoder().decode(ReplicaSetWire.self, from: data)
         guard wire.kind == "ReplicaSet" else { throw ControllerDecodeError.notAReplicaSet(StatusDisplay.clip(wire.kind ?? "")) }
-        let refs = wire.metadata.ownerReferences ?? []
-        guard let ref = refs.first(where: { $0.controller == true }) ?? refs.first else { return nil }
+        guard let ref = OwnerReferenceWire.controller(in: wire.metadata.ownerReferences) else { return nil }
         return OwnerRef(kind: ref.kind, name: ref.name)
     }
 
@@ -81,11 +83,25 @@ public enum Controller {
 
     struct ReplicaSetWire: Decodable {
         struct Metadata: Decodable {
-            struct Owner: Decodable { let kind: String; let name: String; let controller: Bool? }
-            let ownerReferences: [Owner]?
+            let ownerReferences: [OwnerReferenceWire]?
         }
         let kind: String?
         let metadata: Metadata
+    }
+}
+
+/// OwnerReferenceWire is one `metadata.ownerReferences` entry as the API
+/// serves it, for pods and ReplicaSets alike.
+struct OwnerReferenceWire: Decodable {
+    let apiVersion: String?
+    let kind: String
+    let name: String
+    let controller: Bool?
+
+    /// The reference marked `controller: true`, the first if several are, as
+    /// apimachinery's `GetControllerOf` returns it; nil when none is marked.
+    static func controller(in refs: [OwnerReferenceWire]?) -> OwnerReferenceWire? {
+        refs?.first { $0.controller == true }
     }
 }
 
