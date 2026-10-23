@@ -13,8 +13,8 @@ and is free to use.
 
 | channel | for | what you get |
 |---|---|---|
-| curl | headless Macs, scripted installs, SSH sessions | `curl -fsSL https://k3sm.io/install.sh \| sh` fetches a release tarball of signed, notarized binaries and runs `k3sm install` |
-| app | desktop users | a notarized disk image holding `k3sm.app`, dragged to `/Applications`; Developer ID signed, downloaded from k3sm.io, and it updates itself |
+| curl | headless Macs, scripted installs, SSH sessions | `curl -fsSL https://k3sm.io/install.sh \| sh` fetches a release tarball of ad-hoc signed binaries (only the app's disk image is Developer ID signed and notarized) and runs `k3sm install` |
+| app | desktop users | a notarized disk image holding `k3sm.app`, dragged to `/Applications`; Developer ID signed, downloaded from the GitHub release page; it does not update itself, so a new version is a new disk image |
 
 Both channels carry the same k3sm build at the same version and end in the
 same installed layout: `/Library/k3sm`, the `io.k3sm.*` LaunchDaemons and the
@@ -94,7 +94,7 @@ short guided first run, one step at a time, with the steps listed across its top
    Terminal); a pasted `--server <address> --token <token>` line is read too.
    The app reads the address and token out of it: extra spaces, line
    breaks, quotes, `\` line continuations and a URL such as
-   `https://studio.local:9345/` are fine, and anything a shell would act on
+   `https://server.example.com:9345/` are fine, and anything a shell would act on
    (`;`, `|`, `&`, `$`, backquotes, redirections) is refused. Nothing in the
    paste is ever run. The field is a secure field, the token is never shown or
    logged, and the window shows only the server and "Token: received".
@@ -174,7 +174,7 @@ login** in the app's Settings turns it off or on again (see
   a growing, randomized wait of at most a minute; if the cluster refuses
   the admin kubeconfig in the watch, the tab says so, and the watch waits
   until the window opens again. The selected tab's list is re-read every 5 seconds (every 15
-  seconds on Images, Services, Storage, Models and Stats (whose storage chart
+  seconds on Images, Services, Storage, Models, Alerts and Stats (whose storage chart
   uses the Storage tab's reads), and on Builds once the
   build engine is ready). The
   status report is re-read when k3sm changes one of its status records
@@ -763,7 +763,17 @@ window. Then come the actions:
   opens that file for you to read. Nothing is uploaded, and it reads no
   kubeconfig, token, Secret, environment or pod manifest. Share the file
   yourself if you want to.
+- **Copy Join Command…** appears on a server only. It mints a fresh worker
+  join token (valid for 15 minutes) and copies the join as one line, as a
+  concealed clipboard item that stays on this Mac and is cleared after 60
+  seconds; paste it into Terminal on the Mac that should join. It shows
+  disabled, with the reason as its help text, while k3sm is not running on this
+  Mac, another change is running, or the Mac has more than one join address.
 - **Settings…** (Command-comma), **Dashboard** and **Quit k3sm**.
+
+The menu bar at the top of the screen has **View > Refresh** (Command-R),
+which re-reads the status and the open tab, and **Help > Take the Tour**, which
+starts the guided tour of the window.
 
 After a stop the status item disappears, because k3sm is no longer running.
 At your next login the app posts a notification, "k3sm is stopped (by you)",
@@ -1076,10 +1086,12 @@ one of:
 |---|---|
 | a managed update is rolling | show its progress, offer nothing new |
 | the server, and the only node, with the app carrying a newer release | the app-carried update of this Mac |
+| the server of a cluster with workers, with the app carrying a newer release than the server runs, every node Ready, and the installed k3sm and the running update controller both able to bind the roll to the app's release (a release at or above the one that added `update apply --pin-sha256`) and at most one minor release behind it | the version-set roll: "Update the Cluster to vX" moves every node to the release the app carries, workers first, this server last, bound to the digest the app's signed bundle records |
+| the server of a cluster with workers, the same, but the installed k3sm cannot bind the roll to a digest, the running controller does not check a release pin, or the cluster is more than one minor release (or a different major release) behind the app | nothing from the app: the reason is shown, naming the `sudo k3sm update apply --version <tag>` command to run in Terminal, or the release to go through first |
 | the server, with the server's check naming a newer release | the managed update, every node, the server last |
 | the server, with a node behind the release the server runs | the managed update pinned to the server's release, which moves the nodes not on it ([A node behind the server](#a-node-behind-the-server)) |
 | the server, with a node behind but the server on a build with no release tag, or a node on a newer release than the server | nothing: the reason is shown |
-| the server of a cluster with other nodes (or none known), the app newer but no newer release found yet | nothing: it updates only by the managed update |
+| the server of a cluster with other nodes (or none known), the app newer but no newer release found yet, and no version-set roll to offer (the app carries no release tag, or no node needs to move) | nothing: it updates only by the managed update |
 | a worker, with the app carrying a newer release | the app-carried update of this Mac |
 | a worker behind the server, with no newer release in the app | nothing: update the cluster from the server |
 | the app carrying an older release than the one installed | nothing: the app does not downgrade |
@@ -1090,7 +1102,10 @@ An update the app cannot run now (a build of the app that is not Developer
 ID signed, no administrator account, another change running, the installed
 k3sm failing the app's checks for the managed update, or a worker whose
 control-plane address cannot be read) is shown disabled, naming the release,
-with the reason as its help text and line.
+with the reason as its help text and line. The version-set roll is shown the
+same way, disabled, while a node is not Ready or the node list cannot be read,
+while a node runs a newer release than the app carries, and when the app has
+no record of its release's digest (download the app again).
 
 - On a worker the app-carried update names the control-plane Mac the worker
   joins, and the update keeps it joined there. The control-plane address
@@ -1109,8 +1124,10 @@ When it carries an older k3sm than the one installed, or the installed
 version cannot be read, the app offers no app-carried update; a downgrade
 runs in a terminal.
 
-New versions of the app arrive as a new disk image or through the Mac App
-Store. The app has no built-in downloader.
+The app does not update itself and has no built-in downloader. A new version
+of the app is a new disk image from the GitHub release page, dragged to
+`/Applications` over the old one; the cluster then moves to the release the new
+app carries by the update plan above.
 
 ## Repairing
 
