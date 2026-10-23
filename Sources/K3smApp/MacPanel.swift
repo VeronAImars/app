@@ -17,14 +17,15 @@ limitations under the License.
 import K3smStatus
 import SwiftUI
 
-/// MacPanel is the left column, scrolled. With more than one node a switch
-/// at the top picks the view: Cluster (the state, a grid of tiles with the
-/// cluster's figures, one compact row per node with what its pods request)
-/// or This Mac (the machine, the state, tiles with what it uses and the
-/// data root, the nodes block, the core grid and the memory meter).
-/// Both end with the daemons from the status report. It is the left pane
-/// of the console's split view: wider than its minimum, the tiles take more
-/// columns and a node row puts its meters on its own line.
+/// MacPanel is the left column: the wordmark pinned at the top, the rest
+/// scrolled. With more than one node a switch at the top picks the view:
+/// Cluster (the state, a grid of tiles with the cluster's figures, one
+/// compact row per node with what its pods request) or This Mac (the machine,
+/// the state, tiles with what it uses and the data root, the nodes block, the
+/// core grid and the memory meter). Both end with the daemons from the status
+/// report. It is the left pane of the console's split view: wider than its
+/// minimum, the tiles take more columns and a node row puts its meters on its
+/// own line.
 struct MacPanel: View {
     @ObservedObject var app: AppModel
     @ObservedObject var workloads: WorkloadsModel
@@ -37,17 +38,24 @@ struct MacPanel: View {
     private var tour: TourModel { app.tour }
 
     var body: some View {
-        ScrollViewReader { proxy in
-            ScrollView(.vertical) {
-                content
-                    .padding(.horizontal, PanelLayout.edge)
-                    .padding(.bottom, 20)
-                    .frame(maxWidth: .infinity, alignment: .topLeading)
-            }
-            .onReceive(tour.$scrollTarget.compactMap { $0 }) { target in
-                // A tour stop in the panel is scrolled into view before it is lit.
-                withAnimation(.easeInOut(duration: 0.3)) { proxy.scrollTo(target, anchor: .top) }
-                tour.scrollTarget = nil
+        VStack(alignment: .leading, spacing: 14) {
+            // The wordmark stays put above the column: scrolling, by hand or
+            // by the tour reaching a stop, never carries it out of view.
+            Wordmark(flap: app.flap, tour: tour)
+                .padding(.top, 44)
+                .padding(.horizontal, PanelLayout.edge)
+            ScrollViewReader { proxy in
+                ScrollView(.vertical) {
+                    content
+                        .padding(.horizontal, PanelLayout.edge)
+                        .padding(.bottom, 20)
+                        .frame(maxWidth: .infinity, alignment: .topLeading)
+                }
+                .onReceive(tour.$scrollTarget.compactMap { $0 }) { target in
+                    // A tour stop in the panel is scrolled into view before it is lit.
+                    withAnimation(.easeInOut(duration: 0.3)) { proxy.scrollTo(target, anchor: .top) }
+                    tour.scrollTarget = nil
+                }
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
@@ -65,14 +73,11 @@ struct MacPanel: View {
         .background(Palette.deep)
     }
 
-    /// The column, top to bottom: the wordmark, then the figures, or while
-    /// the set-up flow fills the content pane (`ConsolePane.setUp`) the
-    /// "Not installed" state and a note. It scrolls, so nothing is cut off in
-    /// a short window.
+    /// The column under the wordmark: the figures, or while the set-up flow
+    /// fills the content pane (`ConsolePane.setUp`) the "Not installed" state
+    /// and a note. It scrolls, so nothing is cut off in a short window.
     private var content: some View {
         VStack(alignment: .leading, spacing: 14) {
-            Wordmark(flap: app.flap, tour: tour)
-                .padding(.top, 44)
             if !app.pane.stripShown {
                 stateRow
                 Footnote(ConsolePane.setUpPanelNote)
