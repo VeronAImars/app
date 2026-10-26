@@ -62,30 +62,43 @@ struct PodActionsTests {
     }
 
     struct OwnerCase: Sendable, CustomTestStringConvertible {
-        let owner: String?
+        let name: String
+        /// The controller reference's kind, nil for a pod without one.
+        let kind: String?
         let offered: Bool
-        var testDescription: String { owner ?? "no owner" }
+        var testDescription: String { name }
     }
 
     static let ownerCases: [OwnerCase] = [
-        OwnerCase(owner: "ReplicaSet web-5f6d", offered: true),
-        OwnerCase(owner: "StatefulSet db", offered: true),
-        OwnerCase(owner: "DaemonSet agent", offered: true),
-        OwnerCase(owner: "Node mac-1", offered: false),
-        OwnerCase(owner: "Job migrate", offered: false),
-        OwnerCase(owner: "CronJob nightly", offered: false),
-        OwnerCase(owner: "Widget w", offered: false),
-        OwnerCase(owner: "replicaset web", offered: false),
-        OwnerCase(owner: "ReplicaSet", offered: false),
-        OwnerCase(owner: " ReplicaSet web", offered: false),
-        OwnerCase(owner: nil, offered: false),
+        OwnerCase(name: "ReplicaSet", kind: "ReplicaSet", offered: true),
+        OwnerCase(name: "StatefulSet", kind: "StatefulSet", offered: true),
+        OwnerCase(name: "DaemonSet", kind: "DaemonSet", offered: true),
+        OwnerCase(name: "Node (a mirror pod)", kind: "Node", offered: false),
+        OwnerCase(name: "Job", kind: "Job", offered: false),
+        OwnerCase(name: "CronJob", kind: "CronJob", offered: false),
+        OwnerCase(name: "an unknown kind", kind: "Widget", offered: false),
+        OwnerCase(name: "a kind in the wrong case", kind: "replicaset", offered: false),
+        OwnerCase(name: "no controller reference", kind: nil, offered: false),
     ]
 
-    @Test("restart is offered only when the owner recreates the pod", arguments: ownerCases)
+    @Test("restart is offered only when the controller reference's kind recreates the pod", arguments: ownerCases)
     func restartOnlyForRecreatingOwners(_ c: OwnerCase) {
-        let pod = c.owner.map { ownedPod(owner: $0) } ?? testPod("bare")
+        let pod = c.kind.map { ownedPod(owner: "\($0) web-5f6d") } ?? testPod("bare")
         #expect(PodActions.available(for: pod) == (c.offered ? [.restart, .delete] : [.delete]))
         #expect((PodActions.request(.restart, for: pod) != nil) == c.offered)
+    }
+
+    @Test("the kind is read from the controller reference, not the display string")
+    func kindComesFromTheReference() {
+        // The listing's text names a ReplicaSet, the reference says Job: the reference decides.
+        var pod = ownedPod(owner: "ReplicaSet web-5f6d")
+        pod.controllerRef = OwnerRef(apiVersion: "batch/v1", kind: "Job", name: "web-5f6d", uid: "owner-1")
+        #expect(PodActions.available(for: pod) == [.delete])
+        #expect(PodActions.afterDelete(owner: "ReplicaSet web-5f6d", kind: "Job") == "Its owner, ReplicaSet web-5f6d, may not recreate it.")
+        // The text alone, with no reference, offers nothing to restart.
+        pod.controllerRef = nil
+        #expect(PodActions.available(for: pod) == [.delete])
+        #expect(PodActions.afterDelete(owner: nil, kind: nil) == "Nothing recreates it; this pod is gone for good.")
     }
 
     @Test("the restart request deletes the confirmed pod without waiting")
@@ -278,8 +291,15 @@ struct PodLocalActionsTests {
 }
 
 /// An owned pod in the shop namespace, by default the ReplicaSet's.
+/// A pod owned by `owner`, given as the "Kind name" the listing shows, with
+/// the matching controller reference set, as the decoder sets both from the
+/// one reference marked `controller: true`.
 private func ownedPod(name: String = "web-1", namespace: String = "shop", owner: String = "ReplicaSet web-5f6d") -> Pod {
-    Pod(name: name, namespace: namespace, uid: "\(namespace)-\(name)", image: "registry.local/app:1", kind: .nativeProcess,
-        phase: "Running", health: .running, ready: true, restarts: 0, ports: [], owner: owner, created: nil,
-        cpuRequest: nil, memoryRequest: nil, nodeName: nil)
+    var pod = Pod(name: name, namespace: namespace, uid: "\(namespace)-\(name)", image: "registry.local/app:1", kind: .nativeProcess,
+                  phase: "Running", health: .running, ready: true, restarts: 0, ports: [], owner: owner, created: nil,
+                  cpuRequest: nil, memoryRequest: nil, nodeName: nil)
+    let space = owner.firstIndex(of: " ") ?? owner.endIndex
+    pod.controllerRef = OwnerRef(apiVersion: "apps/v1", kind: String(owner[..<space]),
+                                 name: String(owner[space...]).trimmingCharacters(in: .whitespaces), uid: "owner-\(name)")
+    return pod
 }

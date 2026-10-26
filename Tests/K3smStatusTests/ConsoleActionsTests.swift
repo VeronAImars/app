@@ -151,8 +151,12 @@ private struct KindRequest: ConsoleActionRequest {
     func report(_ run: ActionRun) -> ActionOutcome { .succeeded("") }
 }
 
+/// A pod a ReplicaSet owns, with the controller reference the decoder sets
+/// beside the "Kind name" text, since Restart reads the reference's kind.
 private func ownedPod() -> Pod {
-    Pod(name: "web-1", namespace: "shop", uid: "shop-web-1", image: "registry.local/app:1", kind: .nativeProcess,
-        phase: "Running", health: .running, ready: true, restarts: 0, ports: [], owner: "ReplicaSet web-5f6d", created: nil,
-        cpuRequest: nil, memoryRequest: nil, nodeName: nil)
+    var pod = Pod(name: "web-1", namespace: "shop", uid: "shop-web-1", image: "registry.local/app:1", kind: .nativeProcess,
+                  phase: "Running", health: .running, ready: true, restarts: 0, ports: [], owner: "ReplicaSet web-5f6d", created: nil,
+                  cpuRequest: nil, memoryRequest: nil, nodeName: nil)
+    pod.controllerRef = OwnerRef(apiVersion: "apps/v1", kind: "ReplicaSet", name: "web-5f6d", uid: "owner-web-5f6d")
+    return pod
 }
