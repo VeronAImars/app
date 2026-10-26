@@ -253,15 +253,17 @@ final class SettingsWindowController: NSObject, NSWindowDelegate, NSToolbarDeleg
         window.setFrame(NSRect(origin: origin, size: frame.size), display: true, animate: keepTop && window.isVisible)
     }
 
-    /// The SwiftUI view of each pane.
+    /// The SwiftUI view of each pane, its controls (checkboxes, segments)
+    /// tinted `Palette.accent` rather than the system accent.
     private static func view(for pane: SettingsPane, model: SettingsModel) -> AnyView {
-        switch pane {
+        let content: AnyView = switch pane {
         case .general: AnyView(GeneralPane(settings: model, preferences: model.preferences))
         case .cluster, .storage: AnyView(NodeSettingsPaneView(pane: pane, app: model.app))
         case .network: AnyView(NetworkPane(app: model.app, nodes: model.app.workloads.nodeList))
         case .updates: AnyView(UpdatesPane(app: model.app, preferences: model.preferences))
         case .advanced: AnyView(AdvancedPane(settings: model, app: model.app))
         }
+        return AnyView(content.tint(Palette.navy))
     }
 
     private static func identifier(_ pane: SettingsPane) -> NSToolbarItem.Identifier {

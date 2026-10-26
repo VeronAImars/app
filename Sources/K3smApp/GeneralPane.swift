@@ -23,7 +23,8 @@ import SwiftUI
 /// stops k3sm first (`QuitPolicy`, off by default), the app's
 /// appearance (`AppAppearance`), the Dock
 /// animation (off and disabled under Reduce Motion), the poll profile
-/// (`PollProfile`), the tour and Reset Window Layout, and the app's own version (`AppVersion.title`). Its state
+/// (`PollProfile`), the tour and Reset Window Layout, and, in the corner
+/// beside a 16 pt mark, the app's own version (`AppVersion.title`). Its state
 /// is on `SettingsModel` and `PreferencesStore`.
 struct GeneralPane: View {
     @ObservedObject var settings: SettingsModel
@@ -88,10 +89,15 @@ struct GeneralPane: View {
                         .help(Help.General.resetLayout)
                 }
             }
-            group("Version") {
+            HStack(spacing: 7) {
+                Spacer(minLength: 0)
+                Butterfly().fill(Palette.accent).frame(width: 16, height: 15).accessibilityHidden(true)
                 Text(verbatim: SelfCheck.appVersion().title)
+                    .font(.system(size: 11.5))
+                    .foregroundStyle(.secondary)
                     .textSelection(.enabled)
             }
+            .padding(.top, 2)
         }
         .padding(20)
         .frame(width: SettingsWindowController.paneWidth, alignment: .leading)
@@ -104,10 +110,10 @@ struct GeneralPane: View {
         }
     }
 
-    /// A titled group of rows.
+    /// A titled group of rows, its title a small-caps navy eyebrow.
     private func group<Content: View>(_ title: String, @ViewBuilder _ content: () -> Content) -> some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Text(title).font(.headline)
+        VStack(alignment: .leading, spacing: 7) {
+            Eyebrow(title)
             VStack(alignment: .leading, spacing: 8) { content() }.padding(.leading, 2)
         }
     }
