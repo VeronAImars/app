@@ -254,7 +254,7 @@ final class SettingsWindowController: NSObject, NSWindowDelegate, NSToolbarDeleg
     }
 
     /// The SwiftUI view of each pane, its controls (checkboxes, segments)
-    /// tinted `Palette.accent` rather than the system accent.
+    /// tinted `Palette.navy` rather than the system accent.
     private static func view(for pane: SettingsPane, model: SettingsModel) -> AnyView {
         let content: AnyView = switch pane {
         case .general: AnyView(GeneralPane(settings: model, preferences: model.preferences))
