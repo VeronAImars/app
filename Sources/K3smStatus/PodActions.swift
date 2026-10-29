@@ -50,6 +50,10 @@ public struct PodActionRequest: Equatable, ConsoleActionRequest {
     public let uid: String
     /// The owner as "Kind name", clipped; nil for a pod without one.
     public let owner: String?
+    /// The owner's kind from the pod's controller reference
+    /// (`Pod.controllerRef`), unclipped, compared and never shown; nil for a
+    /// pod without one.
+    public let ownerKind: String?
 
     public var id: String { "\(action.rawValue):\(podKey)" }
     public var section: ConsoleSection { .workloads }
@@ -89,7 +93,7 @@ public struct PodActionRequest: Equatable, ConsoleActionRequest {
 
     /// Whether the pod's owner is a controller that recreates a deleted pod.
     public var recreated: Bool {
-        PodActions.ownerKind(owner).map(PodActions.recreatingOwnerKinds.contains) ?? false
+        ownerKind.map(PodActions.recreatingOwnerKinds.contains) ?? false
     }
 
     /// The question asked before it runs.
@@ -104,7 +108,7 @@ public struct PodActionRequest: Equatable, ConsoleActionRequest {
         case .delete:
             return ActionConfirmation(
                 title: "Delete \(StatusDisplay.clip(namespace.value + "/" + pod.value))?",
-                message: "k3sm deletes this pod, and its containers stop now. " + PodActions.afterDelete(owner: owner),
+                message: "k3sm deletes this pod, and its containers stop now. " + PodActions.afterDelete(owner: owner, kind: ownerKind),
                 verbTitle: action.title, cancelTitle: "Cancel", destructive: true)
         }
     }
@@ -117,16 +121,6 @@ public enum PodActions {
     /// not (a finished one never does), a Node owns a mirror pod its kubelet
     /// keeps, and any other kind is not known to recreate one.
     public static let recreatingOwnerKinds: Set<String> = ["ReplicaSet", "StatefulSet", "DaemonSet"]
-
-    /// The kind in `Pod.owner`'s "Kind name" display string: the text before
-    /// the first space, or nil when there is none. A Kubernetes kind and an
-    /// object name carry no space, so the split is exact. The pod list's
-    /// decode of the controller reference builds that display string
-    /// (`Workloads.swift`), and this parse reads the kind back from it.
-    public static func ownerKind(_ owner: String?) -> String? {
-        guard let owner, let space = owner.firstIndex(of: " "), space != owner.startIndex else { return nil }
-        return String(owner[..<space])
-    }
 
     /// The actions offered for a pod, in button order. Restart only for a pod
     /// whose owner recreates it (`recreatingOwnerKinds`), since nothing brings
@@ -194,12 +188,13 @@ public enum PodActions {
     /// What follows a delete, by the pod's owner: a controller that
     /// recreates its pods (`recreatingOwnerKinds`) brings it back; an owner
     /// of another kind may not; nothing brings back a pod without one.
-    /// `owner` is `Pod.owner` already clipped.
-    public static func afterDelete(owner: String?) -> String {
+    /// `owner` is `Pod.owner` already clipped; `kind` is the controller
+    /// reference's kind, the one the display string was built from.
+    public static func afterDelete(owner: String?, kind: String?) -> String {
         guard let owner, !owner.isEmpty else {
             return "Nothing recreates it; this pod is gone for good."
         }
-        if let kind = ownerKind(owner), recreatingOwnerKinds.contains(kind) {
+        if let kind, recreatingOwnerKinds.contains(kind) {
             return "Its owner, \(owner), recreates it, maybe under a new name and on another node."
         }
         return "Its owner, \(owner), may not recreate it."
@@ -210,14 +205,15 @@ public enum PodActions {
     public static func request(_ action: PodAction, for pod: Pod) -> PodActionRequest? {
         guard let namespace = pod.namespaceName, let name = pod.resourceName, !pod.uid.isEmpty else { return nil }
         let owner = pod.owner.map(StatusDisplay.clip)
+        let kind = pod.controllerRef?.kind
         switch action {
         case .restart:
-            guard let owner, !owner.isEmpty,
-                  let kind = ownerKind(pod.owner), recreatingOwnerKinds.contains(kind) else { return nil }
+            guard let owner, !owner.isEmpty, let kind, recreatingOwnerKinds.contains(kind) else { return nil }
         case .delete:
             break
         }
-        return PodActionRequest(action: action, namespace: namespace, pod: name, podKey: pod.key, uid: pod.uid, owner: owner)
+        return PodActionRequest(action: action, namespace: namespace, pod: name, podKey: pod.key, uid: pod.uid,
+                                owner: owner, ownerKind: kind)
     }
 
     /// What the UID read just before the action says: nil when the pod is
