@@ -1,7 +1,7 @@
 # The k3sm look for the info popover and Settings
 
-Status: part 1 (the popover) designed and implemented; parts 2 and 3 to follow, each filling in
-its own section below.
+Status: parts 1 (the popover) and 2 (Settings) designed and implemented; part 3 to follow,
+filling in its own section below.
 
 ## Summary
 
@@ -12,7 +12,7 @@ The info popover and the Settings window take the k3sm look in three parts, one 
 2. **Settings**: eyebrows over the groups, the app's version beside a 16 pt mark in the
    window's corner in place of the "Version" group, and one `.tint` across the panes.
 3. **An app accent colour** through `NSAccentColorName`, from a committed one-colour asset
-   catalog (`Assets.car`), light #022ffb and dark #7d97ff.
+   catalog (`Assets.car`), light #011389 and dark #7d97ff, the `Palette.navy` pair.
 
 ## Scope
 
@@ -43,8 +43,10 @@ Out of scope:
    lands together with `hack/make-accent.sh`, reviewed the way `Resources/AppIcon.icns` and
    `hack/make-icon.sh` are: running the script reproduces the committed file. It uses only tools
    that ship with Xcode or the Command Line Tools. The accent pair in the catalog (light
-   #022ffb, dark #7d97ff) is the same pair as a `Palette` accent entry in code. A user-chosen
-   system accent still wins.
+   #011389, dark #7d97ff) is `Palette.navy`, the colour of the strip's icons, the Pods chip and
+   the eyebrows; the brighter `Palette.accent` (#022ffb) is a mark colour and reads neon on a
+   filled control beside them, so it stays on the hairlines. A user-chosen system accent still
+   wins.
 4. **No dependency.** `Package.swift`, `hack/verify-deps.sh` and `hack/deps.allow` are not
    touched by any of the three parts.
 5. **Every new control gets a help tag from the catalog** in `Sources/K3smStatus/Help.swift`,
@@ -133,7 +135,35 @@ are two cards with the Update button under them.
 
 ### Part 2: Settings
 
-To be written in part 2's PR: the eyebrow style, the corner mark and version, and the one tint.
+**The eyebrow style.** Each group title in General ("Login", "Appearance", "Dock", "Status",
+"Window") is drawn by the popover's `Eyebrow` view: the title uppercased, 11 pt semibold,
+0.6 pt tracking, `Palette.navy` (12.4:1 in light and 4.67:1 in dark on the selected-row
+tint; higher on the pane's plain window background). The group's rows keep their 8 pt
+spacing, 2 pt in from the eyebrow. The titles are the same strings as before, so nothing
+new enters the catalog or `K3smStatus`.
+
+**The corner mark and version.** The "Version" group goes. In its place the pane ends in one
+right-aligned row: `Butterfly` at 16 by 15 pt in `Palette.accent` (a mark whose meaning the
+text beside it gives, so it is hidden from accessibility and takes no help tag), then
+`SelfCheck.appVersion().title` ("k3sm.app v0.2.0", or the pseudo-version) at 11.5 pt in the
+secondary text colour, selectable as before. It is plain text with its label, so it takes no
+help tag either.
+
+**The one tint.** `SettingsWindowController.view(for:)` wraps every pane's root view in
+`.tint(Palette.navy)`, so the checkboxes and the segmented Appearance picker in every pane
+draw in the navy (light #011389, dark #7d97ff) rather than the system accent, the same navy
+as the eyebrows above them. The first cut used `Palette.accent` (#022ffb); on a filled
+segment and a row of checkboxes beside navy eyebrows it read as a second, brighter blue, so
+the tint is the navy and the corner mark keeps the accent. The toolbar's selected pane is
+drawn by AppKit in the system accent and does not follow this tint; part 3 is what changes
+it. Pop-up menus keep the system look.
+
+**Not changed.** The panes' controls, their help tags and what they do; the other panes'
+layout; the window's sizing and placement.
+
+**Docs.** `docs/ARCHITECTURE.md`: the Settings row says the groups carry eyebrows, the
+version sits in the corner with the mark, and the panes are tinted. `README.md`: the General
+pane's "Version" bullet becomes the corner line.
 ### Part 3: the accent colour
 
 To be written in part 3's PR: the asset catalog's contents, the script's steps and the tool it

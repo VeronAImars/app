@@ -876,8 +876,9 @@ The **General** pane:
   its natural width (fitting itself again) and first view, shown, shows the details column at its first width, opens logs at a third of the window again, and puts every
   table's columns back to their first widths. Tabs, searches and selections
   stay as they are.
-- **Version** names the app and its own version, `k3sm.app v0.2.0` for a
-  release build or the pseudo-version for a development build.
+- The pane's corner carries the k3sm mark and the app's own version,
+  `k3sm.app v0.2.0` for a release build or the pseudo-version for a
+  development build; the text can be selected and copied.
 
 The **Cluster** pane shows this node's install settings as k3sm reports them
 in its status: the node's role, then on a server the mesh address, the extra
