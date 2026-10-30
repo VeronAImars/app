@@ -646,6 +646,27 @@ public enum Help {
         /// The This Mac view's unified memory meter.
         public static let memoryMeter = HelpTag("Fill is memory used: the pods', from metrics-server, then macOS and apps",
                                                 control: "panel: Unified memory meter")
+        /// The rail's pod count, once the panel is pinned at its floor.
+        public static func railPods(_ count: Int) -> HelpTag {
+            HelpTag("This Mac is running \(count) \(count == 1 ? "pod" : "pods")", control: "panel: rail pod count")
+        }
+
+        /// The rail's compact CPU meter: its full figures, since the rail
+        /// has no room to draw the lines under a full-width bar.
+        public static func railCPU(_ stack: LoadStack) -> HelpTag {
+            railMeter(stack, title: "CPU", control: "panel: rail CPU bar")
+        }
+
+        /// The rail's compact memory meter, its full figures likewise.
+        public static func railMemory(_ stack: LoadStack) -> HelpTag {
+            railMeter(stack, title: "Memory", control: "panel: rail Memory bar")
+        }
+
+        static func railMeter(_ stack: LoadStack, title: String, control: String) -> HelpTag {
+            let lines = stack.lines(titled: title)
+            let text = lines.isEmpty ? "\(title) has no metrics yet" : lines.joined(separator: ", ")
+            return HelpTag(text, control: control)
+        }
 
         /// The panel's view switch segment.
         public static func mode(_ mode: PanelMode) -> HelpTag {
@@ -679,8 +700,10 @@ public enum Help {
                                  "cores used", "pod memory used", "data root", "pod on this Mac", "pods on this Mac", ""]
 
         public static var all: [HelpTag] {
-            [cluster, thisMac, nodeDot, nodeCores, nodeMemory, liveCPU, liveMemory,
-             coreGrid, memoryMeter] + tileLabels.map { tileTag(label: $0) }
+            let sample = LoadStack(requested: 0.4, used: 0.3, lines: ["1.43 used of 19 cores", "3.5 requested"])
+            return [cluster, thisMac, nodeDot, nodeCores, nodeMemory, liveCPU, liveMemory,
+                   coreGrid, memoryMeter, railPods(1), railPods(4), railCPU(sample),
+                   railMemory(LoadStack(requested: nil, used: nil, lines: []))] + tileLabels.map { tileTag(label: $0) }
         }
     }
 

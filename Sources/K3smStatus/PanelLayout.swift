@@ -93,14 +93,19 @@ public enum PanelLayout {
     public static let widthKey = "consolePanelWidth"
     public static let collapsedKey = "consolePanelCollapsed"
 
-    /// Whether the split view may collapse the panel by itself, its item's
-    /// `canCollapse`: only while the panel is already hidden (View > Hide
-    /// Panel), so the collapsed item stays collapsed. While the panel is
-    /// shown a drag of its divider stops at `minimum` and a double-click on
-    /// the divider does nothing; nothing on screen could bring a panel back
-    /// that a drag had collapsed.
-    public static func splitCanCollapse(collapsed: Bool) -> Bool {
-        collapsed
+    /// The panel's floor once collapsed: an 80 pt navy rail with the mark,
+    /// the state dot and word, the pod count and the two meters, their full
+    /// figures as help tags. The panel never leaves the split; "collapsed"
+    /// means pinned here, not hidden.
+    public static let railWidth: Double = 80
+
+    /// Whether a drag that reaches `width` should snap the panel to the rail
+    /// instead of resting there: below `minimum`, where nothing on screen
+    /// could otherwise stop it. A double-click on the divider does nothing;
+    /// only View > Hide/Show Panel, its shortcut, or the divider's seam disc
+    /// toggle the rail and the panel back.
+    public static func shouldSnapToRail(width: Double) -> Bool {
+        width < minimum
     }
 
     /// The panel's padding on each side, from its edge to its content.
@@ -178,7 +183,8 @@ public enum PanelLayout {
         return clamp(value, to: minimum...ceiling)
     }
 
-    /// A stored collapsed flag; false when none is stored or it is not a Bool.
+    /// A stored rail flag (pinned at `railWidth` rather than the panel's
+    /// usual range); false when none is stored or it is not a Bool.
     public static func restoreCollapsed(from stored: Any?) -> Bool {
         (stored as? Bool) ?? false
     }

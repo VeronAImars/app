@@ -20,12 +20,12 @@ import Testing
 
 @Suite("the console panel's width")
 struct PanelLayoutTests {
-    @Test("the split may collapse the panel only while the panel is already hidden")
-    func splitCannotCollapseAShownPanel() {
-        // Shown: a drag stops at the minimum and a double-click does nothing.
-        #expect(!PanelLayout.splitCanCollapse(collapsed: false))
-        // Hidden through the menu: the item stays collapsed.
-        #expect(PanelLayout.splitCanCollapse(collapsed: true))
+    @Test("a drag below the minimum snaps to the rail; at or above it rests")
+    func shouldSnapToRailBelowTheMinimum() {
+        #expect(PanelLayout.shouldSnapToRail(width: PanelLayout.railWidth))
+        #expect(PanelLayout.shouldSnapToRail(width: PanelLayout.minimum - 1))
+        #expect(!PanelLayout.shouldSnapToRail(width: PanelLayout.minimum))
+        #expect(!PanelLayout.shouldSnapToRail(width: PanelLayout.minimum + 1))
     }
 
     private static func node(_ name: String, thisMac: Bool = false) -> ClusterNodeRow {

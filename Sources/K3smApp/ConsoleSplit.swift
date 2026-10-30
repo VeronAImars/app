@@ -20,12 +20,15 @@ import SwiftUI
 
 /// ConsoleSplit is the console's split view: the navy panel on the left, the
 /// tab column in the middle and the inspector on the right, with a thin
-/// divider between each that the user drags. The panel's width stays within
-/// `range` (its minimum to the natural width fixed at the window's layout,
-/// `PanelWidth`) and is drawn at `width`; a drag records the width on the
-/// model (`PanelWidth.drag`) and stops at the panel's minimum: neither a
-/// drag nor a double-click collapses the panel (`PanelLayout.splitCanCollapse`),
-/// and only the model's collapsed flag (View > Hide Panel) hides it. The inspector opens at `inspectorWidth` and moves
+/// divider between each that the user drags. The panel never leaves the
+/// split: while shown its width stays within `range` (its minimum to the
+/// natural width fixed at the window's layout, `PanelWidth`) and a drag
+/// records the width on the model (`PanelWidth.drag`); a drag past the
+/// minimum snaps it to `PanelLayout.railWidth` instead
+/// (`PanelLayout.shouldSnapToRail`, `AppModel.panelDragged`), where it is
+/// pinned until the model's `collapsed` flag clears (View > Hide/Show Panel,
+/// its shortcut, or the divider's seam disc). A double-click on the divider
+/// does nothing either way. The inspector opens at `inspectorWidth` and moves
 /// only when the user drags its divider (`InspectorWidth`, `PaneKeeper`),
 /// between its minimum and the widest that leaves the tab column at
 /// `contentMinimum`; the details button collapses and shows it. Under all
@@ -61,9 +64,6 @@ struct ConsoleSplit<Panel: View, Content: View, Details: View, Logs: View>: NSVi
         let controller = ConsoleSplitController(panel: panelHost, content: contentHost, inspector: inspectorHost)
         controller.onDrag = { [weak app] width in
             app?.panelDragged(width)
-        }
-        controller.onCollapse = { [weak app] collapsed in
-            if app?.consolePanelCollapsed != collapsed { app?.consolePanelCollapsed = collapsed }
         }
         controller.onInspectorDrag = { [weak app] width in
             app?.inspectorDragged(width)
@@ -210,9 +210,6 @@ final class ConsoleSplitController: NSSplitViewController {
     private let inspectorItem: NSSplitViewItem
     /// A user's drag of the panel's divider, as the panel's new width.
     var onDrag: (Double) -> Void = { _ in }
-    /// The panel shown again by the split itself (a drag of the hidden
-    /// panel's divider), or hidden, which only the model asks for.
-    var onCollapse: (Bool) -> Void = { _ in }
     /// A user's drag of the inspector's divider, as its new width.
     var onInspectorDrag: (Double) -> Void = { _ in }
     /// The inspector collapsed or shown by the split itself (a drag past
@@ -235,8 +232,11 @@ final class ConsoleSplitController: NSSplitViewController {
 
     init(panel: NSViewController, content: NSViewController, inspector: NSViewController) {
         panelItem = NSSplitViewItem(viewController: panel)
-        panelItem.canCollapse = PanelLayout.splitCanCollapse(collapsed: false)
-        panelItem.minimumThickness = PanelLayout.minimum
+        // The panel never leaves the split (no AppKit collapse): its
+        // thickness alone moves between the rail and its usual range
+        // (`apply`), so `canCollapse` stays false and `isCollapsed` unused.
+        panelItem.canCollapse = false
+        panelItem.minimumThickness = PanelLayout.railWidth
         panelItem.holdingPriority = NSLayoutConstraint.Priority(260)
         contentItem = NSSplitViewItem(viewController: content)
         contentItem.holdingPriority = .defaultLow
@@ -257,27 +257,20 @@ final class ConsoleSplitController: NSSplitViewController {
     @available(*, unavailable)
     required init?(coder: NSCoder) { fatalError("init(coder:) is not used") }
 
-    /// Brings the split to the model: the panel's range, its collapsed
-    /// state, the content's minimum, and the stored width within the range.
+    /// Brings the split to the model: the panel pinned at the rail width
+    /// while collapsed, else free within `range`; the content's minimum;
+    /// the stored width within whichever range applies.
     func apply(range: ClosedRange<Double>, width: Double, collapsed: Bool, contentMinimum: Double) {
         self.contentMinimum = contentMinimum
-        panelItem.maximumThickness = range.upperBound
         contentItem.minimumThickness = contentMinimum
-        if panelItem.isCollapsed != collapsed {
-            moving = true
-            // The item may collapse only while the model hides it: set
-            // before a collapse, cleared after an expand.
-            if collapsed { panelItem.canCollapse = PanelLayout.splitCanCollapse(collapsed: true) }
-            panelItem.isCollapsed = collapsed
-            moving = false
-            placed = nil
+        let target: Double
+        if collapsed {
+            panelItem.maximumThickness = PanelLayout.railWidth
+            target = PanelLayout.railWidth
+        } else {
+            panelItem.maximumThickness = range.upperBound
+            target = PanelLayout.clamp(width, to: range)
         }
-        // An expand the split made itself (a drag of the hidden panel's
-        // divider) reaches here with the item already shown.
-        let canCollapse = PanelLayout.splitCanCollapse(collapsed: collapsed)
-        if panelItem.canCollapse != canCollapse { panelItem.canCollapse = canCollapse }
-        guard !collapsed else { return }
-        let target = PanelLayout.clamp(width, to: range)
         guard target != placed else { return }
         placed = target
         place(target)
@@ -316,7 +309,7 @@ final class ConsoleSplitController: NSSplitViewController {
             return
         }
         let divider = Double(splitView.dividerThickness)
-        let panel = panelItem.isCollapsed ? 0 : Double(panelItem.viewController.view.frame.width) + divider
+        let panel = Double(panelItem.viewController.view.frame.width) + divider
         let shown = InspectorWidth.clamp(width, to: InspectorWidth.range(shared: total - panel, columnMinimum: contentMinimum))
         moving = true
         splitView.setPosition(CGFloat(total - shown - divider), ofDividerAt: 1)
@@ -341,25 +334,19 @@ final class ConsoleSplitController: NSSplitViewController {
 
     override func splitView(_ splitView: NSSplitView, shouldCollapseSubview subview: NSView,
                             forDoubleClickOnDividerAt dividerIndex: Int) -> Bool {
-        subview == panelItem.viewController.view && PanelLayout.splitCanCollapse(collapsed: panelItem.isCollapsed)
+        false
     }
 
     override func splitViewDidResizeSubviews(_ notification: Notification) {
         super.splitViewDidResizeSubviews(notification)
         guard !moving else { return }
-        let collapsed = panelItem.isCollapsed
-        // A drag that showed the hidden panel cannot hide it again before
-        // the model's update arrives.
-        let canCollapse = PanelLayout.splitCanCollapse(collapsed: collapsed)
-        if panelItem.canCollapse != canCollapse { panelItem.canCollapse = canCollapse }
-        onCollapse(collapsed)
         let inspectorCollapsed = inspectorItem.isCollapsed
         onInspectorCollapse(inspectorCollapsed)
         // Only the user's drag records a width (`DividerSplitView`); the
         // window's layout and resizes leave the stored widths alone.
         guard dividers.tracking,
               let index = notification.userInfo?["NSSplitViewDividerIndex"] as? Int else { return }
-        if index == 0, !collapsed {
+        if index == 0 {
             let width = Double(panelItem.viewController.view.frame.width)
             placed = width
             pending = nil

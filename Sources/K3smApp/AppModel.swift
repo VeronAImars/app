@@ -265,8 +265,13 @@ final class AppModel: ObservableObject {
         consolePanelWidth.measured(natural)
     }
 
-    /// A divider drag: the width is kept and saved.
+    /// A divider drag: below the panel's minimum it snaps to the rail
+    /// (`PanelLayout.shouldSnapToRail`); otherwise the width is kept and saved.
     func panelDragged(_ width: Double) {
+        guard !PanelLayout.shouldSnapToRail(width: width) else {
+            if !consolePanelCollapsed { consolePanelCollapsed = true }
+            return
+        }
         consolePanelWidth.drag(to: width)
     }
 
@@ -299,18 +304,14 @@ final class AppModel: ObservableObject {
         if let current = statusPopoverMeasured, abs(current - height) < 1 { return }
         statusPopoverMeasured = height
     }
-    /// Whether the console panel is collapsed: View > Hide Panel
-    /// (Command-Option-L) toggles it; a drag or double-click on the divider
-    /// does not hide it. Kept across launches.
+    /// Whether the console panel is pinned at its rail width: View > Hide
+    /// Panel (Command-Option-L) toggles it; the panel never leaves the
+    /// split, and a double-click on the divider does not toggle it. Kept
+    /// across launches.
     @Published var consolePanelCollapsed: Bool = PanelLayout.restoreCollapsed(
         from: UserDefaults.standard.object(forKey: PanelLayout.collapsedKey)) {
         didSet { UserDefaults.standard.set(consolePanelCollapsed, forKey: PanelLayout.collapsedKey) }
     }
-    /// Where the main window's close, minimize and zoom buttons end, from
-    /// the window's leading edge, as the window controller measured them
-    /// (nil until then): the strip clears them while the panel is hidden
-    /// (`TabStripLayout.leadingInset`).
-    @Published var windowButtonsEdge: Double?
     /// The console's own state; it polls only while the console is on screen.
     let workloads: WorkloadsModel
     /// Every tab's writes: the one confirmation, the run and its report.

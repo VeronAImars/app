@@ -713,17 +713,17 @@ login** in the app's Settings turns it off or on again (see
   divider between it and the list. You can make it narrower, down to its
   original width: each node's meters then move under its name. It goes no wider than its natural width; dragging it back there,
   or Reset Window Layout in Settings, lets it fit itself again. Dragging the
-  divider stops at the panel's original width and never hides it (a
-  double-click on it does nothing). While the panel is hidden, dragging the
-  divider at the window's left edge shows it again. Choose
-  View > Hide Panel (Command-Option-L) to hide the panel, and View > Show
-  Panel (the same shortcut) to bring it back; while it is hidden the tabs
-  start past the window's close, minimize and zoom buttons. The window's
-  minimum width follows: the panel's minimum plus the list's, or the list's
-  alone, with room for those buttons, while the panel is hidden. A width you drag narrower than the content
+  divider past the panel's original width snaps the panel to a narrow navy
+  rail, 80 pt wide, that never leaves the window: the mark, the state dot and
+  word, the pod count and this Mac's two load meters, each with its figures
+  as a help tag (a double-click on the divider does nothing). Choose
+  View > Hide Panel (Command-Option-L) to narrow the panel to the rail, and
+  View > Show Panel (the same shortcut) to bring it back at its width; the
+  rail's divider does not drag. The window's minimum width follows: the
+  panel's minimum, or the rail's width, plus the list's. A width you drag narrower than the content
   lasts the session only; a saved width that is narrower than the content is
   replaced, and the panel opens fitted. The app remembers whether the panel
-  is hidden.
+  is at the rail.
 - Every tab's **table columns** are resizable: drag the faint line between
   two column titles. The line on a column's far side from the name column
   moves with the pointer, so a column after the name widens as you drag

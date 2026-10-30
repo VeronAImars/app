@@ -96,19 +96,42 @@ struct ConsoleSplitDragTests {
         }
     }
 
-    @Test("dragging the panel's divider past its minimum stops there and never hides the panel")
-    func panelDividerStopsAtTheMinimum() throws {
+    @Test("dragging the panel's divider past its minimum snaps it to the rail, never hides it")
+    func panelDividerSnapsToTheRail() throws {
         try SplitWindow.with { harness in
             let before = harness.window.frame
             harness.drag(harness.inner, divider: 0, by: -2000)
             #expect(harness.window.frame == before)
             #expect(!harness.inner.isSubviewCollapsed(harness.inner.arrangedSubviews[0]))
+            #expect(harness.inner.arrangedSubviews[0].frame.width == CGFloat(PanelLayout.railWidth))
+            #expect(harness.app.consolePanelCollapsed)
+        }
+    }
+
+    @Test("a drag that only crosses the minimum still snaps all the way to the rail, not partway")
+    func panelDividerPastMinimumSnapsFully() throws {
+        try SplitWindow.with { harness in
+            let panel = harness.inner.arrangedSubviews[0].frame.width
+            // Just past the minimum: not a drag to the rail's own width.
+            let delta = -(panel - CGFloat(PanelLayout.minimum) + 10)
+            harness.drag(harness.inner, divider: 0, by: delta)
+            #expect(harness.inner.arrangedSubviews[0].frame.width == CGFloat(PanelLayout.railWidth))
+            #expect(harness.app.consolePanelCollapsed)
+        }
+    }
+
+    @Test("a drag that stays at or above the minimum rests there, not at the rail")
+    func panelDividerAtTheMinimumRests() throws {
+        try SplitWindow.with { harness in
+            let panel = harness.inner.arrangedSubviews[0].frame.width
+            let delta = -(panel - CGFloat(PanelLayout.minimum))
+            harness.drag(harness.inner, divider: 0, by: delta)
             #expect(harness.inner.arrangedSubviews[0].frame.width == CGFloat(PanelLayout.minimum))
             #expect(!harness.app.consolePanelCollapsed)
         }
     }
 
-    @Test("a double-click on the panel's divider does not hide the panel")
+    @Test("a double-click on the panel's divider does not change it")
     func panelDividerDoubleClickKeepsThePanel() throws {
         try SplitWindow.with { harness in
             let split = try #require(harness.inner.delegate as? ConsoleSplitController)
@@ -118,22 +141,37 @@ struct ConsoleSplitDragTests {
         }
     }
 
-    @Test("View > Hide Panel hides the panel and Show Panel brings it back at its width")
-    func menuHidesAndShowsThePanel() throws {
+    @Test("View > Hide Panel pins the panel at the rail and Show Panel restores its width")
+    func menuPinsAndRestoresThePanel() throws {
         try SplitWindow.with { harness in
             let panel = harness.inner.arrangedSubviews[0]
             let width = panel.frame.width
             harness.app.consolePanelCollapsed = true
             harness.settle()
-            #expect(harness.inner.isSubviewCollapsed(panel))
+            #expect(!harness.inner.isSubviewCollapsed(panel))
+            #expect(panel.frame.width == CGFloat(PanelLayout.railWidth))
             harness.app.consolePanelCollapsed = false
             harness.settle()
             #expect(!harness.inner.isSubviewCollapsed(panel))
             #expect(panel.frame.width == width)
-            // Shown again, the panel still cannot be dragged away.
+            // Shown again, the panel still cannot be dragged away, only snapped to the rail.
             harness.drag(harness.inner, divider: 0, by: -2000)
             #expect(!harness.inner.isSubviewCollapsed(panel))
-            #expect(!harness.app.consolePanelCollapsed)
+            #expect(panel.frame.width == CGFloat(PanelLayout.railWidth))
+            #expect(harness.app.consolePanelCollapsed)
+        }
+    }
+
+    @Test("pinned at the rail, the divider cannot be dragged back out")
+    func railDividerCannotBeDraggedOut() throws {
+        try SplitWindow.with { harness in
+            harness.app.consolePanelCollapsed = true
+            harness.settle()
+            let panel = harness.inner.arrangedSubviews[0]
+            #expect(panel.frame.width == CGFloat(PanelLayout.railWidth))
+            harness.drag(harness.inner, divider: 0, by: 2000)
+            #expect(panel.frame.width == CGFloat(PanelLayout.railWidth))
+            #expect(harness.app.consolePanelCollapsed)
         }
     }
 
