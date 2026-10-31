@@ -108,26 +108,78 @@ struct ConsoleSplitDragTests {
         }
     }
 
-    @Test("a drag that only crosses the minimum still snaps all the way to the rail, not partway")
-    func panelDividerPastMinimumSnapsFully() throws {
+    @Test("a drag in from the column rests at the pointer down to the minimum, and at the rail once inside it",
+          arguments: [
+              (PanelLayout.minimum - 1, PanelLayout.railWidth, true),
+              (PanelLayout.openWidth, PanelLayout.railWidth, true),
+              (PanelLayout.minimum, PanelLayout.minimum, false),
+              (PanelLayout.minimum + 30, PanelLayout.minimum + 30, false),
+          ])
+    func panelDividerDropDecides(drop: Double, rests: Double, rail: Bool) throws {
         try SplitWindow.with { harness in
             let panel = harness.inner.arrangedSubviews[0].frame.width
-            // Just past the minimum: not a drag to the rail's own width.
-            let delta = -(panel - CGFloat(PanelLayout.minimum) + 10)
-            harness.drag(harness.inner, divider: 0, by: delta)
-            #expect(harness.inner.arrangedSubviews[0].frame.width == CGFloat(PanelLayout.railWidth))
+            harness.drag(harness.inner, divider: 0, by: CGFloat(drop) - panel)
+            #expect(harness.inner.arrangedSubviews[0].frame.width == CGFloat(rests))
+            #expect(harness.app.consolePanelCollapsed == rail)
+            // A snap to the rail leaves the panel's own width alone; a rest records its width.
+            #expect(harness.app.consolePanelWidth.dragged == (rail ? nil : rests))
+        }
+    }
+
+    @Test("while the divider is dragged it stays at the rail or from the minimum up, the panel turns with it, and the drag places nothing")
+    func panelTurnsLiveWhileDragged() throws {
+        try SplitWindow.with { harness in
+            let panel = harness.inner.arrangedSubviews[0]
+            let width = panel.frame.width
+            // The model's live turn, as the split reports the drag.
+            harness.app.panelDragged(PanelLayout.minimum - 1)
+            #expect(harness.app.consolePanelCollapsed)
+            harness.app.panelDragged(PanelLayout.minimum)
+            #expect(!harness.app.consolePanelCollapsed)
+            harness.settle()
+            #expect(panel.frame.width == width)
+            // Mid-drag, with the pointer inside the minimum, the divider is at the rail, not under the pointer.
+            harness.drag(harness.inner, divider: 0, along: [CGFloat(PanelLayout.minimum) - 40 - width], release: false) {
+                #expect(panel.frame.width == CGFloat(PanelLayout.railWidth))
+                #expect(harness.app.consolePanelCollapsed)
+            }
+            #expect(panel.frame.width == CGFloat(PanelLayout.railWidth))
+            // A drop that leaves the model as it was still places the panel: at the rail, a pull short of opening it.
+            harness.drag(harness.inner, divider: 0, by: CGFloat(PanelLayout.openWidth - PanelLayout.railWidth) - 1)
+            #expect(panel.frame.width == CGFloat(PanelLayout.railWidth))
             #expect(harness.app.consolePanelCollapsed)
         }
     }
 
-    @Test("a drag that stays at or above the minimum rests there, not at the rail")
-    func panelDividerAtTheMinimumRests() throws {
+    @Test("one drag turns once: in past the minimum and back out it is the column at the pointer again, out from the rail and back it is the rail again")
+    func dragTurnsByWhereItBegan() throws {
         try SplitWindow.with { harness in
-            let panel = harness.inner.arrangedSubviews[0].frame.width
-            let delta = -(panel - CGFloat(PanelLayout.minimum))
-            harness.drag(harness.inner, divider: 0, by: delta)
-            #expect(harness.inner.arrangedSubviews[0].frame.width == CGFloat(PanelLayout.minimum))
+            let panel = harness.inner.arrangedSubviews[0]
+            let width = panel.frame.width
+            let minimum = CGFloat(PanelLayout.minimum)
+            let rail = CGFloat(PanelLayout.railWidth)
+            // From the column: inside the minimum (the rail), then back out to 30 past it, where it rests.
+            harness.drag(harness.inner, divider: 0, along: [minimum - 20 - width, minimum + 30 - width])
+            #expect(panel.frame.width == minimum + 30)
             #expect(!harness.app.consolePanelCollapsed)
+            #expect(harness.app.consolePanelWidth.dragged == PanelLayout.minimum + 30)
+            // From the rail: pulled open (the minimum), back inside the pull (the rail), out past the minimum.
+            harness.app.consolePanelCollapsed = true
+            harness.settle()
+            let pull = CGFloat(PanelLayout.openWidth) - rail
+            harness.drag(harness.inner, divider: 0, along: [pull, pull - 10, minimum + 40 - rail])
+            #expect(panel.frame.width == minimum + 40)
+            #expect(!harness.app.consolePanelCollapsed)
+            #expect(harness.app.consolePanelWidth.dragged == PanelLayout.minimum + 40)
+            // From the rail, between the pull and the minimum the panel is open at its minimum, not under the pointer.
+            harness.app.consolePanelCollapsed = true
+            harness.settle()
+            harness.drag(harness.inner, divider: 0, along: [pull + 40], release: false) {
+                #expect(panel.frame.width == minimum)
+                #expect(!harness.app.consolePanelCollapsed)
+            }
+            #expect(panel.frame.width == minimum)
+            #expect(harness.app.consolePanelWidth.dragged == PanelLayout.minimum)
         }
     }
 
@@ -154,7 +206,7 @@ struct ConsoleSplitDragTests {
             harness.settle()
             #expect(!harness.inner.isSubviewCollapsed(panel))
             #expect(panel.frame.width == width)
-            // Shown again, the panel still cannot be dragged away, only snapped to the rail.
+            // Shown again, the panel still cannot be dragged away, only to the rail.
             harness.drag(harness.inner, divider: 0, by: -2000)
             #expect(!harness.inner.isSubviewCollapsed(panel))
             #expect(panel.frame.width == CGFloat(PanelLayout.railWidth))
@@ -162,16 +214,27 @@ struct ConsoleSplitDragTests {
         }
     }
 
-    @Test("pinned at the rail, the divider cannot be dragged back out")
-    func railDividerCannotBeDraggedOut() throws {
+    @Test("at the rail, a pull short of the disc's width falls back to the rail, the disc's width opens the panel at its minimum, and past the minimum it rests where it is dropped")
+    func railDividerDragsOut() throws {
         try SplitWindow.with { harness in
             harness.app.consolePanelCollapsed = true
             harness.settle()
             let panel = harness.inner.arrangedSubviews[0]
-            #expect(panel.frame.width == CGFloat(PanelLayout.railWidth))
-            harness.drag(harness.inner, divider: 0, by: 2000)
-            #expect(panel.frame.width == CGFloat(PanelLayout.railWidth))
+            let rail = CGFloat(PanelLayout.railWidth)
+            #expect(panel.frame.width == rail)
+            harness.drag(harness.inner, divider: 0, by: CGFloat(PanelLayout.openWidth) - 1 - rail)
+            #expect(panel.frame.width == rail)
             #expect(harness.app.consolePanelCollapsed)
+            harness.drag(harness.inner, divider: 0, by: CGFloat(PanelLayout.openWidth) - rail)
+            #expect(panel.frame.width == CGFloat(PanelLayout.minimum))
+            #expect(!harness.app.consolePanelCollapsed)
+            #expect(harness.app.consolePanelWidth.dragged == PanelLayout.minimum)
+            harness.app.consolePanelCollapsed = true
+            harness.settle()
+            harness.drag(harness.inner, divider: 0, by: CGFloat(PanelLayout.minimum) + 50 - rail)
+            #expect(panel.frame.width == CGFloat(PanelLayout.minimum) + 50)
+            #expect(!harness.app.consolePanelCollapsed)
+            #expect(harness.app.consolePanelWidth.dragged == PanelLayout.minimum + 50)
         }
     }
 
@@ -196,7 +259,7 @@ struct ConsoleSplitDragTests {
         }
     }
 
-    @Test("a press on the seam disc that moves drags the divider as the divider would, and snaps past the minimum")
+    @Test("a press on the seam disc that moves drags the divider as the divider would, snapping to the rail and back out by the same rule")
     func seamDiscDragMovesTheDivider() throws {
         try SplitWindow.with { harness in
             let seam = try harness.seam()
@@ -206,9 +269,18 @@ struct ConsoleSplitDragTests {
             #expect(!harness.app.consolePanelCollapsed)
             #expect(panel.frame.width == width - 80)
             #expect(harness.app.consolePanelWidth.dragged == Double(width - 80))
-            harness.press(seam, by: -2000)
+            // Inside the minimum through the disc: the rail, as the divider itself would be.
+            harness.press(seam, by: CGFloat(PanelLayout.minimum) - 1 - (width - 80))
             #expect(harness.app.consolePanelCollapsed)
             #expect(panel.frame.width == CGFloat(PanelLayout.railWidth))
+            // Out from the rail a pull short of the disc's width: the rail still.
+            harness.press(seam, by: CGFloat(PanelLayout.openWidth - PanelLayout.railWidth) - 1)
+            #expect(harness.app.consolePanelCollapsed)
+            #expect(panel.frame.width == CGFloat(PanelLayout.railWidth))
+            // The disc's width out: the column again, at its minimum.
+            harness.press(seam, by: CGFloat(PanelLayout.openWidth - PanelLayout.railWidth))
+            #expect(!harness.app.consolePanelCollapsed)
+            #expect(panel.frame.width == CGFloat(PanelLayout.minimum))
         }
     }
 
@@ -431,6 +503,16 @@ struct SplitWindow {
     /// read by the next drag in the run as its own and move a divider there.
     func drag(_ split: NSSplitView, divider: Int, by delta: CGFloat,
               sourceLocation: SourceLocation = #_sourceLocation) {
+        drag(split, divider: divider, along: (1...10).map { delta * CGFloat($0) / 10 }, sourceLocation: sourceLocation)
+    }
+
+    /// Drags `split`'s divider through `offsets`, each from where the drag
+    /// began along the split's axis, one mouse event per offset, and lets
+    /// go at the last. With `release` false the button stays down after
+    /// the last offset: `held` runs then, mid-drag, and the release follows
+    /// it. The pointer stays on the split as in `drag(_:divider:by:)`.
+    func drag(_ split: NSSplitView, divider: Int, along offsets: [CGFloat], release: Bool = true,
+              sourceLocation: SourceLocation = #_sourceLocation, held: @escaping @MainActor () -> Void = {}) {
         let before = split.arrangedSubviews[divider].frame
         let half = split.dividerThickness / 2
         let start = split.isVertical
@@ -438,7 +520,8 @@ struct SplitWindow {
             : NSPoint(x: split.bounds.midX, y: before.maxY + half)
         let along = split.isVertical ? start.x : start.y
         let length = split.isVertical ? split.bounds.width : split.bounds.height
-        let reach = min(max(along + delta, 0), length) - along
+        let reaches = offsets.map { min(max(along + $0, 0), length) - along }
+        let last = reaches.last ?? 0
         func event(_ type: NSEvent.EventType, _ offset: CGFloat) -> NSEvent {
             let point = split.isVertical ? NSPoint(x: start.x + offset, y: start.y) : NSPoint(x: start.x, y: start.y + offset)
             return NSEvent.mouseEvent(with: type, location: split.convert(point, to: nil), modifierFlags: [],
@@ -449,13 +532,28 @@ struct SplitWindow {
         // Posting an event stops the innermost running run loop, to wake a
         // reader. Run directly, that is the test runner's own loop, which
         // then returns and ends the process; so the posts and the drag run
-        // in a nested pass of the loop, and the post stops that one.
+        // in a nested pass of the loop, and the post stops that one. AppKit
+        // tracks the divider inside `mouseDown` until it reads a mouse-up,
+        // so a held drag posts its release from a timer that fires once the
+        // tracking has read every drag event, with `held` run before it.
         var dragged = false
         CFRunLoopPerformBlock(CFRunLoopGetMain(), CFRunLoopMode.defaultMode.rawValue) {
-            for step in 1...10 {
-                NSApp.postEvent(event(.leftMouseDragged, reach * CGFloat(step) / 10), atStart: false)
+            for reach in reaches {
+                NSApp.postEvent(event(.leftMouseDragged, reach), atStart: false)
             }
-            NSApp.postEvent(event(.leftMouseUp, reach), atStart: false)
+            if release {
+                NSApp.postEvent(event(.leftMouseUp, last), atStart: false)
+            } else {
+                // The event is posted from the main thread, where it was made.
+                nonisolated(unsafe) let up = event(.leftMouseUp, last)
+                let timer = Timer(timeInterval: 0.2, repeats: false) { _ in
+                    MainActor.assumeIsolated {
+                        held()
+                        NSApp.postEvent(up, atStart: false)
+                    }
+                }
+                RunLoop.main.add(timer, forMode: .common)
+            }
             split.mouseDown(with: event(.leftMouseDown, 0))
             dragged = true
         }

@@ -21,17 +21,24 @@ import SwiftUI
 /// ConsoleSplit is the console's split view: the navy panel on the left, the
 /// tab column in the middle and the inspector on the right, with a thin
 /// divider between each that the user drags. The panel never leaves the
-/// split: while shown its width stays within `range` (its minimum to the
-/// natural width fixed at the window's layout, `PanelWidth`) and a drag
-/// records the width on the model (`PanelWidth.drag`); a drag past the
-/// minimum snaps it to `PanelLayout.railWidth` instead
-/// (`PanelLayout.shouldSnapToRail`, `AppModel.panelDragged`), where it is
-/// pinned until the model's `collapsed` flag clears (View > Hide/Show Panel,
-/// its shortcut, or the seam disc). The seam disc (`SeamDiscView`, carried by
+/// split: its divider runs from `PanelLayout.railWidth` to the natural width
+/// fixed at the window's layout (`range`, `PanelWidth`). While a drag runs
+/// the divider rests only at the rail or from the panel's minimum up,
+/// never where the column would be cut (`PanelLayout.dragWidth`, applied
+/// through the split's position constraint): from the column it drops to
+/// the rail once the pointer is inside the minimum, from the rail it jumps
+/// to the minimum once pulled past `PanelLayout.openWidth` and follows the
+/// pointer from there, the turn fixed by where the drag began. The panel
+/// turns live with it (`AppModel.panelDragged`,
+/// `PanelLayout.shouldSnapToRail`), and the drop decides where it rests
+/// (`AppModel.panelDropped`, `PanelLayout.droppedWidth`): the rail, or the
+/// column at the drop, recorded (`PanelWidth.drag`). The model's
+/// `collapsed` flag holds the rail (also View > Hide/Show Panel, its
+/// shortcut, or the seam disc). The seam disc (`SeamDiscView`, carried by
 /// `DividerSplitView`) sits on the panel's divider at its vertical middle
-/// and shows only while the divider is hovered: a click toggles the flag, a
-/// press that moves drags the divider. A double-click on the divider does
-/// nothing either way. The inspector opens at `inspectorWidth` and moves
+/// and shows only while the divider is hovered: a click toggles the flag,
+/// a press that moves drags the divider under the same constraint. A
+/// double-click on the divider does nothing either way. The inspector opens at `inspectorWidth` and moves
 /// only when the user drags its divider (`InspectorWidth`, `PaneKeeper`),
 /// between its minimum and the widest that leaves the tab column at
 /// `contentMinimum`; the details button collapses and shows it. Under all
@@ -67,6 +74,9 @@ struct ConsoleSplit<Panel: View, Content: View, Details: View, Logs: View>: NSVi
         let controller = ConsoleSplitController(panel: panelHost, content: contentHost, inspector: inspectorHost)
         controller.onDrag = { [weak app] width in
             app?.panelDragged(width)
+        }
+        controller.onDrop = { [weak app] width in
+            app?.panelDropped(at: width)
         }
         controller.onInspectorDrag = { [weak app] width in
             app?.inspectorDragged(width)
@@ -212,8 +222,12 @@ final class ConsoleSplitController: NSSplitViewController {
     private let panelItem: NSSplitViewItem
     private let contentItem: NSSplitViewItem
     private let inspectorItem: NSSplitViewItem
-    /// A user's drag of the panel's divider, as the panel's new width.
+    /// A user's drag of the panel's divider in progress, as the panel's
+    /// width now; the model turns the panel's content on it, nothing more.
     var onDrag: (Double) -> Void = { _ in }
+    /// The user let go of the panel's divider after moving it, with the
+    /// panel this wide: the drop decides where it rests.
+    var onDrop: (Double) -> Void = { _ in }
     /// A user's drag of the inspector's divider, as its new width.
     var onInspectorDrag: (Double) -> Void = { _ in }
     /// The inspector collapsed or shown by the split itself (a drag past
@@ -234,6 +248,14 @@ final class ConsoleSplitController: NSSplitViewController {
     private var contentMinimum: Double = 0
     /// Set while this controller moves a divider itself.
     private var moving = false
+    /// Set once the current drag has moved the panel's divider, so its end
+    /// reports a drop.
+    private var draggingPanel = false
+    /// Whether the current drag began with the panel at the rail, which
+    /// fixes where the drag turns the panel (`PanelLayout.turnWidth`).
+    private var dragFromRail = false
+    /// The panel's state last applied, for a drop that changes none of it.
+    private var applied: (range: ClosedRange<Double>, width: Double, collapsed: Bool)?
     private let dividers = DividerSplitView(seam: true)
 
     init(panel: NSViewController, content: NSViewController, inspector: NSViewController) {
@@ -241,6 +263,8 @@ final class ConsoleSplitController: NSSplitViewController {
         // The panel never leaves the split (no AppKit collapse): its
         // thickness alone moves between the rail and its usual range
         // (`apply`), so `canCollapse` stays false and `isCollapsed` unused.
+        // The rail is the floor of every drag; the model decides at the
+        // drop whether the panel rests there (`onDrop`).
         panelItem.canCollapse = false
         panelItem.minimumThickness = PanelLayout.railWidth
         panelItem.holdingPriority = NSLayoutConstraint.Priority(260)
@@ -259,27 +283,67 @@ final class ConsoleSplitController: NSSplitViewController {
         addSplitViewItem(contentItem)
         addSplitViewItem(inspectorItem)
         dividers.seam?.onToggle = { [weak self] in self?.onToggle() }
+        dividers.onTrackingBegan = { [weak self] in
+            guard let self else { return }
+            dragFromRail = applied?.collapsed ?? false
+        }
+        dividers.onTrackingEnded = { [weak self] in self?.dropped() }
+    }
+
+    /// The divider's position while the user drags it, on the divider or
+    /// through the seam disc: the panel's divider rests only at the rail or
+    /// from the panel's minimum up, turning where the drag's start says
+    /// (`PanelLayout.dragWidth`). The inspector's divider, and any position
+    /// the controller sets itself, pass through unchanged. (An override in
+    /// Swift's eyes, of the delegate protocol's optional requirement; the
+    /// controller itself does not implement it, so there is no super.)
+    override func splitView(_ splitView: NSSplitView, constrainSplitPosition proposedPosition: CGFloat,
+                            ofSubviewAt dividerIndex: Int) -> CGFloat {
+        guard dividerIndex == 0, dividers.tracking else { return proposedPosition }
+        return CGFloat(PanelLayout.dragWidth(Double(proposedPosition), fromRail: dragFromRail))
+    }
+
+    /// The user let go: a drag that moved the panel's divider reports the
+    /// panel's width as its drop. A drop that leaves the model as it was
+    /// (the rail already shown, or the column at the width already stored)
+    /// brings no update from the view, whose inputs are what they were; the
+    /// panel is then placed again from the state last applied. Any other
+    /// drop changes the model, and its update places the panel.
+    private func dropped() {
+        guard draggingPanel else { return }
+        draggingPanel = false
+        let width = Double(panelItem.viewController.view.frame.width)
+        onDrop(width)
+        guard let applied else { return }
+        let unchanged: Bool
+        if let rests = PanelLayout.droppedWidth(width) {
+            unchanged = !applied.collapsed && rests == PanelLayout.clamp(applied.width, to: applied.range)
+        } else {
+            unchanged = applied.collapsed
+        }
+        guard unchanged else { return }
+        placed = nil
+        apply(range: applied.range, width: applied.width, collapsed: applied.collapsed, contentMinimum: contentMinimum)
     }
 
     @available(*, unavailable)
     required init?(coder: NSCoder) { fatalError("init(coder:) is not used") }
 
-    /// Brings the split to the model: the panel pinned at the rail width
-    /// while collapsed, else free within `range`; the content's minimum;
-    /// the stored width within whichever range applies; the seam disc's
-    /// wing turned by the state.
+    /// Brings the split to the model: the panel at the rail width while
+    /// collapsed, else at the stored width within `range`, the divider free
+    /// from the rail to the range's top either way, so a drag out from the
+    /// rail runs; the content's minimum; the seam disc's wing turned by the
+    /// state. While the user drags, the flag turns live with the divider
+    /// and nothing is placed: the divider stays where the drag's constraint
+    /// put it, and the drop places it (`dropped`).
     func apply(range: ClosedRange<Double>, width: Double, collapsed: Bool, contentMinimum: Double) {
         self.contentMinimum = contentMinimum
         contentItem.minimumThickness = contentMinimum
         dividers.seam?.collapsed = collapsed
-        let target: Double
-        if collapsed {
-            panelItem.maximumThickness = PanelLayout.railWidth
-            target = PanelLayout.railWidth
-        } else {
-            panelItem.maximumThickness = range.upperBound
-            target = PanelLayout.clamp(width, to: range)
-        }
+        applied = (range, width, collapsed)
+        panelItem.maximumThickness = range.upperBound
+        guard !dividers.tracking else { return }
+        let target = collapsed ? PanelLayout.railWidth : PanelLayout.clamp(width, to: range)
         guard target != placed else { return }
         placed = target
         place(target)
@@ -356,9 +420,12 @@ final class ConsoleSplitController: NSSplitViewController {
         guard dividers.tracking,
               let index = notification.userInfo?["NSSplitViewDividerIndex"] as? Int else { return }
         if index == 0 {
+            // The panel's drag turns its content live and is recorded at
+            // its drop (`dropped`).
             let width = Double(panelItem.viewController.view.frame.width)
             placed = width
             pending = nil
+            draggingPanel = true
             onDrag(width)
         } else if index == 1, !inspectorCollapsed {
             let width = Double(inspectorItem.viewController.view.frame.width)
@@ -376,7 +443,10 @@ final class ConsoleSplitController: NSSplitViewController {
 /// `setPosition` call, as well as a drag. A drag runs inside the split
 /// view's own `mouseDown` (AppKit tracks the mouse there until the button
 /// is released), so `tracking` is set only for that span, and for a drag
-/// through the seam disc, which moves the first divider by `setPosition`.
+/// through the seam disc, which moves the first divider by `setPosition`
+/// at the position the delegate's constraint allows, as the divider's own
+/// drag is constrained. Either span's start calls `onTrackingBegan` and its
+/// end `onTrackingEnded`, the drop.
 ///
 /// The console's split carries the seam disc (`SeamDiscView`) on its first
 /// divider, the panel's: placed at the divider's vertical middle at every
@@ -387,7 +457,18 @@ final class ConsoleSplitController: NSSplitViewController {
 @MainActor
 final class DividerSplitView: NSSplitView {
     /// Whether the split is tracking the user's mouse on a divider.
-    private(set) var tracking = false
+    private(set) var tracking = false {
+        didSet {
+            if !oldValue && tracking { onTrackingBegan() }
+            if oldValue && !tracking { onTrackingEnded() }
+        }
+    }
+    /// The user took hold of a divider, on the divider itself or through
+    /// the seam disc, before it has moved.
+    var onTrackingBegan: () -> Void = {}
+    /// The user let go of a divider: a drag ended, whether on the divider
+    /// itself or through the seam disc.
+    var onTrackingEnded: () -> Void = {}
     /// The seam disc on the first divider; nil on a split without one.
     let seam: SeamDiscView?
     /// Whether the pointer is on the first divider or its disc.
@@ -409,7 +490,9 @@ final class DividerSplitView: NSSplitView {
         }
         seam.onDragMoved = { [weak self] dx in
             guard let self else { return }
-            setPosition(dragStart + dx, ofDividerAt: 0)
+            let proposed = dragStart + dx
+            setPosition(delegate?.splitView?(self, constrainSplitPosition: proposed, ofSubviewAt: 0) ?? proposed,
+                        ofDividerAt: 0)
         }
         seam.onDragEnded = { [weak self] in self?.tracking = false }
     }

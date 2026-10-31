@@ -265,14 +265,29 @@ final class AppModel: ObservableObject {
         consolePanelWidth.measured(natural)
     }
 
-    /// A divider drag: below the panel's minimum it snaps to the rail
-    /// (`PanelLayout.shouldSnapToRail`); otherwise the width is kept and saved.
+    /// A drag of the divider in progress, the panel `width` wide: the
+    /// split keeps the divider at the rail or from the panel's minimum up
+    /// (`PanelLayout.dragWidth`), and the panel turns live between the rail
+    /// and its column with it (`PanelLayout.shouldSnapToRail`), so what the
+    /// drag shows is what the drop leaves. No width is recorded until the drop.
     func panelDragged(_ width: Double) {
-        guard !PanelLayout.shouldSnapToRail(width: width) else {
-            if !consolePanelCollapsed { consolePanelCollapsed = true }
-            return
+        let rail = PanelLayout.shouldSnapToRail(width: width)
+        if rail != consolePanelCollapsed { consolePanelCollapsed = rail }
+    }
+
+    /// The drag ended with the panel `width` wide: the rail, or the panel's
+    /// column at the drop, kept and saved (`PanelLayout.droppedWidth`). A
+    /// drop that changes neither (a pull out from the rail that fell short
+    /// of opening it, or a drag that came back to the stored width) leaves
+    /// the model as it was, and the split places the panel again by itself
+    /// (`ConsoleSplitController.dropped`).
+    func panelDropped(at width: Double) {
+        if let open = PanelLayout.droppedWidth(width) {
+            consolePanelCollapsed = false
+            consolePanelWidth.drag(to: open)
+        } else {
+            consolePanelCollapsed = true
         }
-        consolePanelWidth.drag(to: width)
     }
 
     /// Reset Window Layout: the panel returns to its natural width.
@@ -304,10 +319,12 @@ final class AppModel: ObservableObject {
         if let current = statusPopoverMeasured, abs(current - height) < 1 { return }
         statusPopoverMeasured = height
     }
-    /// Whether the console panel is pinned at its rail width: View > Hide
-    /// Panel (Command-Option-L) toggles it; the panel never leaves the
-    /// split, and a double-click on the divider does not toggle it. Kept
-    /// across launches.
+    /// Whether the console panel is at its rail width: View > Hide Panel
+    /// (Command-Option-L), a click on the seam disc, or a drag in past the
+    /// panel's minimum set it, and a drag out from the rail that opens the
+    /// panel clears it; the panel never leaves the split, and
+    /// a double-click on the divider does not toggle it. Kept across
+    /// launches.
     @Published var consolePanelCollapsed: Bool = PanelLayout.restoreCollapsed(
         from: UserDefaults.standard.object(forKey: PanelLayout.collapsedKey)) {
         didSet { UserDefaults.standard.set(consolePanelCollapsed, forKey: PanelLayout.collapsedKey) }

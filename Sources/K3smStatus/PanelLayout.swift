@@ -99,13 +99,50 @@ public enum PanelLayout {
     /// means pinned here, not hidden.
     public static let railWidth: Double = 80
 
-    /// Whether a drag that reaches `width` should snap the panel to the rail
-    /// instead of resting there: below `minimum`, where nothing on screen
-    /// could otherwise stop it. A double-click on the divider does nothing;
-    /// only View > Hide/Show Panel, its shortcut, or the divider's seam disc
-    /// toggle the rail and the panel back.
+    /// The pull out from the rail that opens the panel: the pointer the
+    /// disc's width past the rail. A lesser pull is a slip, not an intent.
+    public static let openWidth: Double = railWidth + seamDisc
+
+    /// Where a drag of the divider turns the panel between the rail and its
+    /// column, set by where the drag began and held for that drag. From the
+    /// column it is the panel's minimum: the column never draws narrower, so
+    /// where it would start to be cut the panel is the rail instead. From
+    /// the rail it is `openWidth`: pulled that far, the panel jumps to its
+    /// minimum and the divider follows the pointer only past it. One turn
+    /// per drag, so the panel cannot flutter between the two at a boundary.
+    public static func turnWidth(fromRail: Bool) -> Double {
+        fromRail ? openWidth : minimum
+    }
+
+    /// Where the divider goes while a drag runs, for the pointer's `proposed`
+    /// position: the rail below the drag's turn, else the pointer, no
+    /// narrower than the panel's minimum. The divider never rests between
+    /// the rail and the minimum, where the column would be cut. A position
+    /// that is not finite leaves the divider where the drag began. Applying
+    /// this to its own result changes nothing, so the divider's own drag and
+    /// a drag through the seam disc can both pass through it.
+    public static func dragWidth(_ proposed: Double, fromRail: Bool) -> Double {
+        guard proposed.isFinite else { return fromRail ? railWidth : minimum }
+        return proposed < turnWidth(fromRail: fromRail) ? railWidth : max(minimum, proposed)
+    }
+
+    /// Whether the panel at `width` is a rail: narrower than the panel's
+    /// minimum. A drag leaves the divider only at the rail or from the
+    /// minimum up (`dragWidth`), so while it runs this turns the content
+    /// live, and at the drop it decides the rest. A double-click on the
+    /// divider does nothing; View > Hide/Show Panel, its shortcut, or a
+    /// click on the divider's seam disc toggle the rail and the panel.
     public static func shouldSnapToRail(width: Double) -> Bool {
-        width < minimum
+        width.isFinite && width < minimum
+    }
+
+    /// The width a drag dropped at `width` leaves the panel at: nil for the
+    /// rail (`shouldSnapToRail`), else the drop, which `dragWidth` has kept
+    /// at the minimum or above. A width that is not finite rests at the
+    /// minimum: the panel stays on screen rather than snapping away.
+    public static func droppedWidth(_ width: Double) -> Double? {
+        guard width.isFinite else { return minimum }
+        return shouldSnapToRail(width: width) ? nil : max(minimum, width)
     }
 
     /// The seam disc: the one control on the panel's divider, a disc this

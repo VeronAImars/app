@@ -38,14 +38,20 @@ struct MacPanel: View {
     private var tour: TourModel { app.tour }
 
     var body: some View {
+        // While the divider is dragged the panel can be narrower than either
+        // layout: each keeps its own width at the leading edge and is cut
+        // at the trailing one, never squeezed.
         Group {
             if app.consolePanelCollapsed {
                 RailPanel(app: app, workloads: workloads)
+                    .frame(width: PanelLayout.railWidth)
             } else {
                 expanded
+                    .frame(minWidth: PanelLayout.minimum)
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+        .clipped()
         .background(Palette.deep)
     }
 
