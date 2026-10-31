@@ -175,6 +175,73 @@ struct ConsoleSplitDragTests {
         }
     }
 
+    @Test("a click on the seam disc pins the panel at the rail, and a click turns it back")
+    func seamDiscClickTogglesTheRail() throws {
+        try SplitWindow.with { harness in
+            let seam = try harness.seam()
+            let panel = harness.inner.arrangedSubviews[0]
+            let width = panel.frame.width
+            #expect(!seam.collapsed)
+            harness.press(seam, by: 0)
+            #expect(harness.app.consolePanelCollapsed)
+            #expect(panel.frame.width == CGFloat(PanelLayout.railWidth))
+            #expect(seam.collapsed)
+            harness.press(seam, by: 0)
+            #expect(!harness.app.consolePanelCollapsed)
+            #expect(panel.frame.width == width)
+            #expect(!seam.collapsed)
+            // A press that moves less than the slop is still a click.
+            harness.press(seam, by: SeamDiscView.dragSlop - 1)
+            #expect(harness.app.consolePanelCollapsed)
+        }
+    }
+
+    @Test("a press on the seam disc that moves drags the divider as the divider would, and snaps past the minimum")
+    func seamDiscDragMovesTheDivider() throws {
+        try SplitWindow.with { harness in
+            let seam = try harness.seam()
+            let panel = harness.inner.arrangedSubviews[0]
+            let width = panel.frame.width
+            harness.press(seam, by: -80)
+            #expect(!harness.app.consolePanelCollapsed)
+            #expect(panel.frame.width == width - 80)
+            #expect(harness.app.consolePanelWidth.dragged == Double(width - 80))
+            harness.press(seam, by: -2000)
+            #expect(harness.app.consolePanelCollapsed)
+            #expect(panel.frame.width == CGFloat(PanelLayout.railWidth))
+        }
+    }
+
+    @Test("the seam disc sits on the panel's divider at the split's vertical middle, follows it to the rail, and shows only while the seam is hovered")
+    func seamDiscSitsOnTheDividerAndShowsOnHover() throws {
+        try SplitWindow.with { harness in
+            let split = try #require(harness.inner as? DividerSplitView)
+            let seam = try harness.seam()
+            let divider = harness.inner.arrangedSubviews[0].frame.maxX + harness.inner.dividerThickness / 2
+            #expect(seam.alphaValue == 0)
+            #expect(seam.frame.width == CGFloat(PanelLayout.seamDisc))
+            #expect(abs(seam.frame.midX - divider) < 0.5)
+            #expect(abs(seam.frame.midY - harness.inner.bounds.midY) < 0.5)
+            // Above both panes, which the controller adds after the disc: drawn whole, not through the divider's gap.
+            #expect(harness.inner.subviews.last === seam)
+            // On the hairline's reach anywhere along it, on the disc beside it, and nowhere else.
+            #expect(split.onSeam(NSPoint(x: divider + CGFloat(PanelLayout.seamReach) - 0.5, y: 10)))
+            #expect(!split.onSeam(NSPoint(x: divider + CGFloat(PanelLayout.seamReach) + 1, y: 10)))
+            #expect(split.onSeam(NSPoint(x: divider + CGFloat(PanelLayout.seamDisc) / 2 - 1, y: seam.frame.midY)))
+            #expect(!split.onSeam(NSPoint(x: divider + CGFloat(PanelLayout.seamDisc) / 2 - 1, y: seam.frame.maxY + 2)))
+            split.hover(true)
+            #expect(seam.alphaValue == 1)
+            #expect(split.seamHovered)
+            split.hover(false)
+            #expect(seam.alphaValue == 0)
+            harness.app.consolePanelCollapsed = true
+            harness.settle()
+            #expect(abs(seam.frame.midX - (CGFloat(PanelLayout.railWidth) + harness.inner.dividerThickness / 2)) < 0.5)
+            #expect(seam.toolTip == Help.Panel.seamShow.text)
+            #expect(seam.accessibilityLabel() == "Show Panel")
+        }
+    }
+
     @Test("dragging the log pane's top edge raises the pane, not the window")
     func logPaneEdgeKeepsTheWindow() throws {
         try SplitWindow.with(logOpen: true) { harness in
@@ -396,6 +463,41 @@ struct SplitWindow {
         let left = Self.takeEvents().filter { $0.type == .leftMouseDragged || $0.type == .leftMouseUp }
         let ours = left.filter { $0.eventNumber == Self.eventTag }.count
         #expect(left.isEmpty, "the divider's tracking ended before the drag's own mouse-up: \(ours) of its events and \(left.count - ours) others were left in the queue",
+                sourceLocation: sourceLocation)
+        settle()
+    }
+
+    /// The seam disc on the console split's first divider.
+    func seam(sourceLocation: SourceLocation = #_sourceLocation) throws -> SeamDiscView {
+        try #require((inner as? DividerSplitView)?.seam, sourceLocation: sourceLocation)
+    }
+
+    /// Presses the seam disc at its centre and releases it `delta` points
+    /// to the right (left when negative), as a user's mouse does: a press
+    /// that moves less than the disc's slop is a click. The events go
+    /// through the app's queue, as `drag`'s do, and must all be used.
+    func press(_ seam: SeamDiscView, by delta: CGFloat, sourceLocation: SourceLocation = #_sourceLocation) {
+        let start = seam.convert(NSPoint(x: seam.bounds.midX, y: seam.bounds.midY), to: nil)
+        func event(_ type: NSEvent.EventType, _ offset: CGFloat) -> NSEvent {
+            NSEvent.mouseEvent(with: type, location: NSPoint(x: start.x + offset, y: start.y), modifierFlags: [],
+                               timestamp: ProcessInfo.processInfo.systemUptime, windowNumber: window.windowNumber,
+                               context: nil, eventNumber: Self.eventTag, clickCount: 1, pressure: 1)!
+        }
+        Self.takeEvents()
+        var pressed = false
+        CFRunLoopPerformBlock(CFRunLoopGetMain(), CFRunLoopMode.defaultMode.rawValue) {
+            if delta != 0 {
+                for step in 1...10 {
+                    NSApp.postEvent(event(.leftMouseDragged, delta * CGFloat(step) / 10), atStart: false)
+                }
+            }
+            NSApp.postEvent(event(.leftMouseUp, delta), atStart: false)
+            seam.mouseDown(with: event(.leftMouseDown, 0))
+            pressed = true
+        }
+        while !pressed { _ = CFRunLoopRunInMode(.defaultMode, 1, false) }
+        let left = Self.takeEvents().filter { $0.type == .leftMouseDragged || $0.type == .leftMouseUp }
+        #expect(left.isEmpty, "the disc's press ended before its own mouse-up: \(left.count) events were left in the queue",
                 sourceLocation: sourceLocation)
         settle()
     }

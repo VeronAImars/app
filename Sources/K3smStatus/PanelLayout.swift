@@ -108,6 +108,15 @@ public enum PanelLayout {
         width < minimum
     }
 
+    /// The seam disc: the one control on the panel's divider, a disc this
+    /// wide at the split's vertical middle, drawn only while the divider is
+    /// under the pointer. A click toggles the rail and the panel; a press
+    /// that moves drags the divider as the divider itself would.
+    public static let seamDisc: Double = 28
+    /// How far either side of the divider's hairline the pointer counts as
+    /// on the divider, so the disc has a hover zone wider than one point.
+    public static let seamReach: Double = 4
+
     /// The panel's padding on each side, from its edge to its content.
     public static let edge: Double = 20
     /// The panel's horizontal padding, both sides together.

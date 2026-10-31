@@ -716,7 +716,11 @@ login** in the app's Settings turns it off or on again (see
   divider past the panel's original width snaps the panel to a narrow navy
   rail, 80 pt wide, that never leaves the window: the mark, the state dot and
   word, the pod count and this Mac's two load meters, each with its figures
-  as a help tag (a double-click on the divider does nothing). Choose
+  as a help tag (a double-click on the divider does nothing). Rest the
+  pointer on the divider and it lights, with a small disc at its middle
+  carrying one wing of the mark: click the disc to narrow the panel to the
+  rail or, at the rail, to open it again at its width; press and drag the
+  disc to move the divider as the divider itself moves. Choose
   View > Hide Panel (Command-Option-L) to narrow the panel to the rail, and
   View > Show Panel (the same shortcut) to bring it back at its width; the
   rail's divider does not drag. The window's minimum width follows: the

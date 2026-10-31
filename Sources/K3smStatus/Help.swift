@@ -668,6 +668,18 @@ public enum Help {
             return HelpTag(text, control: control)
         }
 
+        /// The seam disc on the panel's divider while the panel is open.
+        public static let seamHide = HelpTag("Narrow the panel to its rail (Command-Option-L)",
+                                             control: "panel seam: disc", label: "Hide Panel")
+        /// The seam disc while the panel is pinned at the rail.
+        public static let seamShow = HelpTag("Open the panel to its last width (Command-Option-L)",
+                                             control: "panel seam: disc", label: "Show Panel")
+
+        /// The seam disc's tag, by the panel's state.
+        public static func seam(collapsed: Bool) -> HelpTag {
+            collapsed ? seamShow : seamHide
+        }
+
         /// The panel's view switch segment.
         public static func mode(_ mode: PanelMode) -> HelpTag {
             mode == .cluster ? cluster : thisMac
@@ -703,7 +715,8 @@ public enum Help {
             let sample = LoadStack(requested: 0.4, used: 0.3, lines: ["1.43 used of 19 cores", "3.5 requested"])
             return [cluster, thisMac, nodeDot, nodeCores, nodeMemory, liveCPU, liveMemory,
                    coreGrid, memoryMeter, railPods(1), railPods(4), railCPU(sample),
-                   railMemory(LoadStack(requested: nil, used: nil, lines: []))] + tileLabels.map { tileTag(label: $0) }
+                   railMemory(LoadStack(requested: nil, used: nil, lines: [])), seamHide, seamShow]
+                + tileLabels.map { tileTag(label: $0) }
         }
     }
 

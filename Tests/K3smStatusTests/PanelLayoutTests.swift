@@ -28,6 +28,14 @@ struct PanelLayoutTests {
         #expect(!PanelLayout.shouldSnapToRail(width: PanelLayout.minimum + 1))
     }
 
+    @Test("the seam disc fits inside the rail and reaches past the divider's hairline on both sides")
+    func seamDiscFitsTheRail() {
+        #expect(PanelLayout.seamDisc == 28)
+        #expect(PanelLayout.seamDisc < PanelLayout.railWidth)
+        #expect(PanelLayout.seamReach > TabStripLayout.dividerWidth)
+        #expect(2 * PanelLayout.seamReach < PanelLayout.seamDisc)
+    }
+
     private static func node(_ name: String, thisMac: Bool = false) -> ClusterNodeRow {
         ClusterNodeRow(
             name: name, role: "server", ready: "Ready", isReady: true, version: nil, thisMac: thisMac,

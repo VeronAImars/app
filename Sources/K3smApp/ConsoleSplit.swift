@@ -27,8 +27,11 @@ import SwiftUI
 /// minimum snaps it to `PanelLayout.railWidth` instead
 /// (`PanelLayout.shouldSnapToRail`, `AppModel.panelDragged`), where it is
 /// pinned until the model's `collapsed` flag clears (View > Hide/Show Panel,
-/// its shortcut, or the divider's seam disc). A double-click on the divider
-/// does nothing either way. The inspector opens at `inspectorWidth` and moves
+/// its shortcut, or the seam disc). The seam disc (`SeamDiscView`, carried by
+/// `DividerSplitView`) sits on the panel's divider at its vertical middle
+/// and shows only while the divider is hovered: a click toggles the flag, a
+/// press that moves drags the divider. A double-click on the divider does
+/// nothing either way. The inspector opens at `inspectorWidth` and moves
 /// only when the user drags its divider (`InspectorWidth`, `PaneKeeper`),
 /// between its minimum and the widest that leaves the tab column at
 /// `contentMinimum`; the details button collapses and shows it. Under all
@@ -71,6 +74,7 @@ struct ConsoleSplit<Panel: View, Content: View, Details: View, Logs: View>: NSVi
         controller.onInspectorCollapse = { [weak app] collapsed in
             if app?.inspectorShown == collapsed { app?.inspectorShown = !collapsed }
         }
+        controller.onToggle = { [weak app] in app?.consolePanelCollapsed.toggle() }
         let logHost = NSHostingController(rootView: logPane)
         logHost.sizingOptions = []
         let outer = ConsoleLogSplitController(console: controller, logs: logHost)
@@ -124,7 +128,7 @@ final class ConsoleLogSplitController: NSSplitViewController {
     /// inner nil, a third of the window).
     private var pending: Double??
     private var moving = false
-    private let dividers = DividerSplitView()
+    private let dividers = DividerSplitView(seam: false)
 
     init(console: ConsoleSplitController, logs: NSViewController) {
         self.console = console
@@ -215,6 +219,8 @@ final class ConsoleSplitController: NSSplitViewController {
     /// The inspector collapsed or shown by the split itself (a drag past
     /// its minimum).
     var onInspectorCollapse: (Bool) -> Void = { _ in }
+    /// A click on the seam disc: toggle the rail and the panel.
+    var onToggle: () -> Void = {}
     /// The width last asked of the split view, so an update that changes
     /// neither the stored width nor the range does not move the divider.
     private var placed: Double?
@@ -228,7 +234,7 @@ final class ConsoleSplitController: NSSplitViewController {
     private var contentMinimum: Double = 0
     /// Set while this controller moves a divider itself.
     private var moving = false
-    private let dividers = DividerSplitView()
+    private let dividers = DividerSplitView(seam: true)
 
     init(panel: NSViewController, content: NSViewController, inspector: NSViewController) {
         panelItem = NSSplitViewItem(viewController: panel)
@@ -252,6 +258,7 @@ final class ConsoleSplitController: NSSplitViewController {
         addSplitViewItem(panelItem)
         addSplitViewItem(contentItem)
         addSplitViewItem(inspectorItem)
+        dividers.seam?.onToggle = { [weak self] in self?.onToggle() }
     }
 
     @available(*, unavailable)
@@ -259,10 +266,12 @@ final class ConsoleSplitController: NSSplitViewController {
 
     /// Brings the split to the model: the panel pinned at the rail width
     /// while collapsed, else free within `range`; the content's minimum;
-    /// the stored width within whichever range applies.
+    /// the stored width within whichever range applies; the seam disc's
+    /// wing turned by the state.
     func apply(range: ClosedRange<Double>, width: Double, collapsed: Bool, contentMinimum: Double) {
         self.contentMinimum = contentMinimum
         contentItem.minimumThickness = contentMinimum
+        dividers.seam?.collapsed = collapsed
         let target: Double
         if collapsed {
             panelItem.maximumThickness = PanelLayout.railWidth
@@ -366,15 +375,137 @@ final class ConsoleSplitController: NSSplitViewController {
 /// their minimums, before a size is placed), a window resize and a
 /// `setPosition` call, as well as a drag. A drag runs inside the split
 /// view's own `mouseDown` (AppKit tracks the mouse there until the button
-/// is released), so `tracking` is set only for that span.
+/// is released), so `tracking` is set only for that span, and for a drag
+/// through the seam disc, which moves the first divider by `setPosition`.
+///
+/// The console's split carries the seam disc (`SeamDiscView`) on its first
+/// divider, the panel's: placed at the divider's vertical middle at every
+/// layout, shown only while the pointer is within `PanelLayout.seamReach`
+/// of the divider's hairline or on the disc itself (`hover`), when the
+/// hairline also lights in the meters' periwinkle (`Palette.fill`). Nothing
+/// is drawn otherwise. The log split has no seam.
 @MainActor
 final class DividerSplitView: NSSplitView {
     /// Whether the split is tracking the user's mouse on a divider.
     private(set) var tracking = false
+    /// The seam disc on the first divider; nil on a split without one.
+    let seam: SeamDiscView?
+    /// Whether the pointer is on the first divider or its disc.
+    private(set) var seamHovered = false
+    /// The first divider's position when a drag through the disc began.
+    private var dragStart: CGFloat = 0
+
+    init(seam: Bool) {
+        self.seam = seam ? SeamDiscView() : nil
+        super.init(frame: .zero)
+        guard let seam = self.seam else { return }
+        // The disc is a subview the split does not arrange.
+        arrangesAllSubviews = false
+        addSubview(seam)
+        seam.onDragBegan = { [weak self] in
+            guard let self else { return }
+            dragStart = arrangedSubviews[0].frame.maxX
+            tracking = true
+        }
+        seam.onDragMoved = { [weak self] dx in
+            guard let self else { return }
+            setPosition(dragStart + dx, ofDividerAt: 0)
+        }
+        seam.onDragEnded = { [weak self] in self?.tracking = false }
+    }
+
+    @available(*, unavailable)
+    required init?(coder: NSCoder) { fatalError("init(coder:) is not used") }
 
     override func mouseDown(with event: NSEvent) {
         tracking = true
         defer { tracking = false }
         super.mouseDown(with: event)
+    }
+
+    /// The first divider's rect, nil before the split has two panes.
+    private var seamDivider: NSRect? {
+        guard arrangedSubviews.count > 1 else { return nil }
+        return NSRect(x: arrangedSubviews[0].frame.maxX, y: bounds.minY, width: dividerThickness, height: bounds.height)
+    }
+
+    /// The divider's hairline widened by `PanelLayout.seamReach` each side.
+    private var seamStrip: NSRect? {
+        seamDivider?.insetBy(dx: -CGFloat(PanelLayout.seamReach), dy: 0)
+    }
+
+    /// Whether `point` (in the split's coordinates) counts as on the seam:
+    /// within the widened hairline, or on the disc.
+    func onSeam(_ point: NSPoint) -> Bool {
+        guard let seam, let strip = seamStrip else { return false }
+        return strip.contains(point) || seam.frame.contains(point)
+    }
+
+    /// The one rect the tracking area watches: the strip and the disc.
+    private var seamZone: NSRect {
+        guard let seam, let strip = seamStrip else { return .zero }
+        return strip.union(seam.frame)
+    }
+
+    override func layout() {
+        super.layout()
+        guard let seam, let divider = seamDivider else { return }
+        let size = CGFloat(PanelLayout.seamDisc)
+        seam.frame = NSRect(x: divider.midX - size / 2, y: bounds.midY - size / 2, width: size, height: size)
+        // The controller adds the panes after the disc; keep the disc above
+        // them, or they draw over it and only the divider's gap shows it.
+        if subviews.last !== seam {
+            addSubview(seam, positioned: .above, relativeTo: nil)
+        }
+    }
+
+    override func updateTrackingAreas() {
+        super.updateTrackingAreas()
+        for area in trackingAreas where area.userInfo?["seam"] != nil { removeTrackingArea(area) }
+        guard seam != nil, seamDivider != nil else { return }
+        addTrackingArea(NSTrackingArea(rect: seamZone, options: [.mouseEnteredAndExited, .mouseMoved, .activeInKeyWindow],
+                                       owner: self, userInfo: ["seam": true]))
+    }
+
+    override func mouseEntered(with event: NSEvent) {
+        guard event.trackingArea?.userInfo?["seam"] != nil else { return super.mouseEntered(with: event) }
+        hover(onSeam(convert(event.locationInWindow, from: nil)))
+    }
+
+    override func mouseMoved(with event: NSEvent) {
+        super.mouseMoved(with: event)
+        guard seam != nil else { return }
+        hover(onSeam(convert(event.locationInWindow, from: nil)))
+    }
+
+    override func mouseExited(with event: NSEvent) {
+        guard event.trackingArea?.userInfo?["seam"] != nil else { return super.mouseExited(with: event) }
+        hover(false)
+    }
+
+    /// The pointer came onto the seam (`inside`) or left it: the disc fades
+    /// in or out and the hairline lights or goes back to its colour.
+    func hover(_ inside: Bool) {
+        guard let seam, inside != seamHovered else { return }
+        seamHovered = inside
+        NSAnimationContext.runAnimationGroup { context in
+            context.duration = 0.15
+            seam.animator().alphaValue = inside ? 1 : 0
+        }
+        needsDisplay = true
+    }
+
+    override func hitTest(_ point: NSPoint) -> NSView? {
+        if let seam, seamHovered, seam.frame.contains(convert(point, from: superview)) { return seam }
+        return super.hitTest(point)
+    }
+
+    override func drawDivider(in rect: NSRect) {
+        if seamHovered, let divider = seamDivider, abs(rect.midX - divider.midX) < 1 {
+            NSColor(Palette.fill).setFill()
+            rect.fill()
+        } else {
+            super.drawDivider(in: rect)
+        }
     }
 }
