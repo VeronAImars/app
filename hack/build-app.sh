@@ -134,12 +134,12 @@ while [ "$#" -gt 0 ]; do
 done
 [ -n "$OUTARG" ] || usage
 
-if ! printf '%s\n' "$VERSION" | grep -Eqx '(0|[1-9][0-9]{0,8})\.(0|[1-9][0-9]{0,8})\.(0|[1-9][0-9]{0,8})'; then
+if ! grep -Eqx '(0|[1-9][0-9]{0,8})\.(0|[1-9][0-9]{0,8})\.(0|[1-9][0-9]{0,8})' <<<"$VERSION"; then
 	echo "build-app: refused: --version must be x.y.z (digits only), got: $VERSION" >&2
 	exit 2
 fi
 
-if [ -n "$TEAM_ID" ] && ! printf '%s\n' "$TEAM_ID" | grep -Eqx '[A-Z0-9]{10}'; then
+if [ -n "$TEAM_ID" ] && ! grep -Eqx '[A-Z0-9]{10}' <<<"$TEAM_ID"; then
 	echo "build-app: refused: --team-id must be ten uppercase letters or digits, got: $TEAM_ID" >&2
 	exit 2
 fi
@@ -323,13 +323,16 @@ codesign --force --sign - --timestamp=none "$APP"
 
 echo "==> verify"
 codesign --verify --strict --deep --verbose=2 "$APP"
-lipo -archs "$APP/Contents/MacOS/$EXE" | grep -qx arm64 \
+archs="$(lipo -archs "$APP/Contents/MacOS/$EXE")"
+grep -qx arm64 <<<"$archs" \
 	|| { echo "build-app: executable is not arm64-only" >&2; exit 1; }
 codesign --verify --strict --verbose=2 "$APP/Contents/MacOS/$MCP"
-lipo -archs "$APP/Contents/MacOS/$MCP" | grep -qx arm64 \
+archs="$(lipo -archs "$APP/Contents/MacOS/$MCP")"
+grep -qx arm64 <<<"$archs" \
 	|| { echo "build-app: $MCP is not arm64-only" >&2; exit 1; }
 codesign --verify --strict --verbose=2 -R="identifier \"$HELPER_ID\"" "$APP/Contents/Helpers/$HELPER"
-lipo -archs "$APP/Contents/Helpers/$HELPER" | grep -qx arm64 \
+archs="$(lipo -archs "$APP/Contents/Helpers/$HELPER")"
+grep -qx arm64 <<<"$archs" \
 	|| { echo "build-app: $HELPER is not arm64-only" >&2; exit 1; }
 if [ -n "$TEAM_ID" ]; then
 	bash "$ROOT/hack/check-team-pin.sh" "$APP/Contents/MacOS/$EXE" "$TEAM_ID" > /dev/null \

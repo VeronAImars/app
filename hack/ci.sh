@@ -306,7 +306,7 @@ for key in CFBundleShortVersionString CFBundleVersion; do
 		|| { echo "FAIL: a development build's $key is not 0.0.0"; exit 1; }
 done
 devver="$(plutil -extract K3smBuildVersion raw "$dplist" 2>/dev/null || true)"
-printf '%s\n' "$devver" | grep -Eqx 'v[0-9]+\.[0-9]+\.[0-9]+-0\.[0-9]{14}-[0-9a-f]{12}(\+dirty)?' \
+grep -Eqx 'v[0-9]+\.[0-9]+\.[0-9]+-0\.[0-9]{14}-[0-9a-f]{12}(\+dirty)?' <<<"$devver" \
 	|| { echo "FAIL: a development build's K3smBuildVersion is not a pseudo-version: '$devver'"; exit 1; }
 [ "$devver" = "$(bash hack/build-version.sh)" ] \
 	|| { echo "FAIL: K3smBuildVersion '$devver' is not this checkout's pseudo-version"; exit 1; }
@@ -483,7 +483,8 @@ missing=0
 while IFS= read -r -d '' f; do
 	start=1
 	# Package.swift must keep the tools-version comment on line 1.
-	if head -n 1 "$f" | grep -q '^// swift-tools-version'; then start=2; fi
+	first="$(head -n 1 "$f")"
+	if grep -q '^// swift-tools-version' <<<"$first"; then start=2; fi
 	# sed reads the whole file, so no stage of this pipe dies of SIGPIPE under
 	# pipefail (tail | head did, for any file larger than the pipe buffer).
 	if ! sed -n "${start},$((start + n - 1))p" "$f" | cmp -s - "$header"; then
