@@ -364,11 +364,19 @@ struct MacPanel: View {
 
     private var pods: [Pod] { workloads.workloads?.pods ?? [] }
     /// The pods on this Mac, for the This Mac meters.
-    private var macPods: [Pod] { ClusterDisplay.thisMacPods(pods, report: report, nodeCount: cluster.nodeCount) }
+    private var macPods: [Pod] { MacPanel.macPods(report: report, workloads: workloads) }
     /// This Mac's node, for its usage sample.
     private var macNode: String? { MetricsDisplay.thisMacNode(report: report, nodes: workloads.nodes) }
     /// This Mac's Cluster view row, for what its pods request; nil before the lists are read.
     private var macRow: ClusterNodeRow? { cluster.nodes.first { $0.thisMac } }
+
+    /// The pods this Mac is running (`ClusterDisplay.thisMacPods`: bound to
+    /// this node when there is more than one, never a finished one). The
+    /// column's pods tile and the rail's pod count count the same list.
+    @MainActor
+    static func macPods(report: StatusReport?, workloads: WorkloadsModel) -> [Pod] {
+        ClusterDisplay.thisMacPods(workloads.workloads?.pods ?? [], report: report, nodes: workloads.nodes)
+    }
 
     /// This Mac's two load bars: what its pods request, from its Cluster
     /// view row, and what its node used, from the usage sample. The column's
@@ -444,7 +452,7 @@ struct Wordmark: View {
 
 /// RailPanel is the console panel pinned at its floor, `PanelLayout.railWidth`,
 /// as the boards on app#191 draw it: the mark, the state dot and word, a
-/// hairline, the pod count over its word, and this Mac's two load meters
+/// hairline, this Mac's pod count over its word, and this Mac's two load meters
 /// upright (`RailMeter`, memory then CPU, each labelled under it), their
 /// full figures given only as a help tag since the rail has no room to draw
 /// them. No new colours; everything here already draws in the full panel.
@@ -455,6 +463,8 @@ struct RailPanel: View {
     private var report: StatusReport? { app.report }
     private var pods: [Pod] { workloads.workloads?.pods ?? [] }
     private var headline: StatusHeadline { app.pane.panelHeadline(report: report, podCount: pods.count) }
+    /// The pods this Mac is running, the list the column's pods tile counts.
+    private var macPods: [Pod] { MacPanel.macPods(report: report, workloads: workloads) }
     /// The same two bars the column's load row draws, upright here.
     private var bars: NodeBars { MacPanel.macBars(report: report, workloads: workloads) }
 
@@ -476,12 +486,12 @@ struct RailPanel: View {
                 Rectangle().fill(.white.opacity(0.18)).frame(width: 40, height: 1)
                     .padding(.vertical, 22)
                 VStack(spacing: 2) {
-                    Text(verbatim: "\(pods.count)").font(.system(size: 14, weight: .semibold)).monospacedDigit()
+                    Text(verbatim: "\(macPods.count)").font(.system(size: 14, weight: .semibold)).monospacedDigit()
                         .foregroundStyle(.white)
-                    Text(verbatim: pods.count == 1 ? "pod" : "pods").font(.system(size: 10))
+                    Text(verbatim: macPods.count == 1 ? "pod" : "pods").font(.system(size: 10))
                         .foregroundStyle(.white.opacity(0.62))
                 }
-                .help(Help.Panel.railPods(pods.count))
+                .help(Help.Panel.railPods(macPods.count))
                 if bars.hasFigures {
                     VStack(spacing: 18) {
                         RailMeter(label: "mem", stack: bars.memory).help(Help.Panel.railMemory(bars.memory))

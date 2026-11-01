@@ -715,7 +715,7 @@ login** in the app's Settings turns it off or on again (see
   or Reset Window Layout in Settings, lets it fit itself again. Drag the
   divider in past the panel's original width and the panel becomes a narrow
   navy rail, 80 pt wide, that never leaves the window: the mark, the state
-  dot and word, the pod count and this Mac's two load meters, each with its
+  dot and word, this Mac's pod count and its two load meters, each with its
   figures as a help tag. The panel is never squeezed or cut on the way: the
   divider goes straight from the panel's original width to the rail, and
   comes back out to the original width if you bring the pointer back past
