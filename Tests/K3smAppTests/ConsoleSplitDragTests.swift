@@ -48,6 +48,17 @@ struct ConsoleSplitDragTests {
         }
     }
 
+    @Test("dragging the inspector's divider squeezes the panel no further than its minimum, never to the rail",
+          .enabled(SplitWindow.needsRoom) { await SplitWindow.screenHolds() })
+    func inspectorDividerLeavesThePanelItsMinimum() throws {
+        try SplitWindow.with { harness in
+            harness.drag(harness.inner, divider: 1, by: -2000)
+            #expect(harness.inner.arrangedSubviews[0].frame.width == CGFloat(PanelLayout.minimum))
+            #expect(!harness.app.consolePanelCollapsed)
+            #expect(abs(harness.inner.arrangedSubviews[1].frame.width - ConsoleView.contentMinWidth()) < 1)
+        }
+    }
+
     @Test("the inspector's divider stops where the tab column reaches its minimum")
     func inspectorDividerStopsAtTheColumnMinimum() throws {
         try SplitWindow.with { harness in

@@ -293,14 +293,27 @@ final class ConsoleSplitController: NSSplitViewController {
     /// The divider's position while the user drags it, on the divider or
     /// through the seam disc: the panel's divider rests only at the rail or
     /// from the panel's minimum up, turning where the drag's start says
-    /// (`PanelLayout.dragWidth`). The inspector's divider, and any position
-    /// the controller sets itself, pass through unchanged. (An override in
+    /// (`PanelLayout.dragWidth`). The inspector's divider goes no further
+    /// left than the panel's held width (`PanelLayout.heldWidth`: the rail
+    /// while pinned there, else the panel's minimum) and the column's
+    /// minimum allow, so a squeeze from the right stops where the column
+    /// is at its minimum and never pins the panel at the rail, whose floor
+    /// the item's own minimum thickness no longer holds. Any position the
+    /// controller sets itself passes through unchanged. (An override in
     /// Swift's eyes, of the delegate protocol's optional requirement; the
     /// controller itself does not implement it, so there is no super.)
     override func splitView(_ splitView: NSSplitView, constrainSplitPosition proposedPosition: CGFloat,
                             ofSubviewAt dividerIndex: Int) -> CGFloat {
-        guard dividerIndex == 0, dividers.tracking else { return proposedPosition }
-        return CGFloat(PanelLayout.dragWidth(Double(proposedPosition), fromRail: dragFromRail))
+        guard dividers.tracking else { return proposedPosition }
+        switch dividerIndex {
+        case 0:
+            return CGFloat(PanelLayout.dragWidth(Double(proposedPosition), fromRail: dragFromRail))
+        case 1:
+            let held = PanelLayout.heldWidth(collapsed: applied?.collapsed ?? false)
+            return max(proposedPosition, CGFloat(held + Double(splitView.dividerThickness) + contentMinimum))
+        default:
+            return proposedPosition
+        }
     }
 
     /// The user let go: a drag that moved the panel's divider reports the

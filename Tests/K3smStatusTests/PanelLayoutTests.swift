@@ -54,6 +54,13 @@ struct PanelLayoutTests {
         #expect(PanelLayout.dragWidth(.infinity, fromRail: false) == minimum)
     }
 
+    @Test("another divider's drag leaves the panel its minimum while open, and the rail while pinned there")
+    func heldWidth() {
+        #expect(PanelLayout.heldWidth(collapsed: false) == PanelLayout.minimum)
+        #expect(PanelLayout.heldWidth(collapsed: true) == PanelLayout.railWidth)
+        #expect(PanelLayout.heldWidth(collapsed: false) > PanelLayout.turnWidth(fromRail: true), "the open panel's floor is past the pull that would open it, so a squeeze never reads as a slip")
+    }
+
     @Test("the panel is a rail below its minimum; a drop there rests at the rail, from the minimum on at the drop")
     func droppedWidthDecidesAtTheMinimum() {
         #expect(PanelLayout.shouldSnapToRail(width: PanelLayout.railWidth))

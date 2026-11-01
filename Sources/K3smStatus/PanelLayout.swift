@@ -126,6 +126,15 @@ public enum PanelLayout {
         return proposed < turnWidth(fromRail: fromRail) ? railWidth : max(minimum, proposed)
     }
 
+    /// The narrowest another divider's drag (the inspector's) may leave the
+    /// panel: the rail while it is pinned there, else its minimum. Only the
+    /// panel's own divider turns it, so a drag that squeezes the panes from
+    /// the right stops where the column reaches its minimum, as it did
+    /// before the rail, and never pins the panel at the rail by the way.
+    public static func heldWidth(collapsed: Bool) -> Double {
+        collapsed ? railWidth : minimum
+    }
+
     /// Whether the panel at `width` is a rail: narrower than the panel's
     /// minimum. A drag leaves the divider only at the rail or from the
     /// minimum up (`dragWidth`), so while it runs this turns the content
