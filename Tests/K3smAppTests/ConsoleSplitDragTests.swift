@@ -26,11 +26,15 @@ import Testing
 /// as `ConsoleView` hosts it, and drag its dividers the way a user does: a
 /// mouse-down on the divider, then drags and a mouse-up from the event
 /// queue, so AppKit runs its own divider tracking. A drag moves only the
-/// panes on either side of the divider; the window keeps its frame.
+/// panes on either side of the divider; the window keeps its frame. The
+/// cases that need the window at its full width, wider than some screens
+/// (`SplitWindow.screenHolds`), skip on a screen that cannot hold it, with
+/// the reason, rather than fail on the cut the screen makes.
 @MainActor
 @Suite("the console's dividers", .serialized, .enabled(if: SplitWindow.windowServer))
 struct ConsoleSplitDragTests {
-    @Test("dragging the inspector's divider widens the inspector, not the window")
+    @Test("dragging the inspector's divider widens the inspector, not the window",
+          .enabled(SplitWindow.needsRoom) { await SplitWindow.screenHolds() })
     func inspectorDividerKeepsTheWindow() throws {
         try SplitWindow.with { harness in
             let before = harness.window.frame
@@ -55,7 +59,8 @@ struct ConsoleSplitDragTests {
         }
     }
 
-    @Test("the inspector's divider stops at the inspector's ceiling in a wide window")
+    @Test("the inspector's divider stops at the inspector's ceiling in a wide window",
+          .enabled(SplitWindow.needsRoom(1000)) { await SplitWindow.screenHolds(extraWidth: 1000) })
     func inspectorDividerStopsAtTheCeiling() throws {
         try SplitWindow.with(extraWidth: 1000) { harness in
             let before = harness.window.frame
@@ -325,7 +330,8 @@ struct ConsoleSplitDragTests {
         }
     }
 
-    @Test("the inspector opens at its stored width and keeps it", arguments: [nil, 400.0])
+    @Test("the inspector opens at its stored width and keeps it",
+          .enabled(SplitWindow.needsRoom) { await SplitWindow.screenHolds() }, arguments: [nil, 400.0])
     func inspectorOpensAtTheStoredWidth(stored: Double?) throws {
         let wanted = stored ?? InspectorWidth.defaultWidth
         try SplitWindow.with(stored: stored.map { [InspectorWidth.key: $0] } ?? [:]) { harness in
@@ -352,7 +358,8 @@ struct ConsoleSplitDragTests {
         }
     }
 
-    @Test("resizing the window gives the change to the tab column")
+    @Test("resizing the window gives the change to the tab column",
+          .enabled(SplitWindow.needsRoom) { await SplitWindow.screenHolds() })
     func windowResizeGoesToTheColumn() throws {
         try SplitWindow.with { harness in
             let panel = harness.inner.arrangedSubviews[0].frame.width
@@ -409,6 +416,27 @@ struct SplitWindow {
     /// Whether this process can open a window at all: a gate run over SSH
     /// without a login session cannot.
     nonisolated static var windowServer: Bool { CGSessionCopyCurrentDictionary() != nil }
+
+    /// Whether the primary screen holds the window `with(extraWidth:)`
+    /// opens, by width: the console's minimum and `extraWidth` more. A
+    /// window wider than its screen is cut to the screen, and the cut comes
+    /// out of the tab column and the inspector: the inspector cannot open
+    /// at its stored width, a drag of its divider stops short of the
+    /// expected widths, and a window resize moves panes that should hold.
+    /// The console's minimum plus the usual 400 pt is wider than a 14-inch
+    /// MacBook Pro's built-in display (1512 pt); the cases that need that
+    /// room skip there (`needsRoom`) and run where the screen holds them.
+    /// The panel's own cases need no room past the minimum and run anywhere.
+    static func screenHolds(extraWidth: CGFloat = 400) -> Bool {
+        guard let screen = NSScreen.screens.first else { return false }
+        return ConsoleView.minSize(inspectorShown: true, panelCollapsed: false).width + extraWidth <= screen.visibleFrame.width
+    }
+
+    /// The reason a case skips when `screenHolds(extraWidth:)` is false.
+    nonisolated static var needsRoom: Comment { needsRoom(400) }
+    nonisolated static func needsRoom(_ extraWidth: Int) -> Comment {
+        "needs a screen that holds the console's minimum width plus \(extraWidth) pt"
+    }
 
     /// The persistent domain the standard defaults write in this process.
     private static var runnerDomain: String {
